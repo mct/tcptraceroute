@@ -1,0 +1,9 @@
+tcptraceroute (1.1-1) unstable; urgency=low
+
+  * Initial Release.
+
+ -- Michael C. Toren <mct@toren.net>  Sun,  1 Jul 2001 13:33:41 -0400
+
+Local variables:
+mode: debian-changelog
+End:

@@ -1,6 +1,6 @@
-.TH TCPTRACEROUTE 8 "2001 April 10"
+.TH TCPTRACEROUTE 8 "2001 June 30"
 .SH NAME
-tcptraceroute \- A traceroute implementation using TCP
+tcptraceroute \- A traceroute implementation using TCP packets
 .SH SYNOPSIS
 .B tcptraceroute [\-n] [ \-i
 .I interface
@@ -25,7 +25,7 @@ tcptraceroute \- A traceroute implementation using TCP
 .B ]
 .SH DESCRIPTION
 .B tcptraceroute
-is a traceroute implementation using TCP.
+is a traceroute implementation using TCP packets.
 .P
 The more traditional
 .IR traceroute (8)
@@ -86,14 +86,13 @@ Set the source address for outgoing packets.  See also the \-i flag.
 Enable debugging, which probably isn't very useful to you.
 .IP \-w
 Set the timeout, in seconds, to wait for a response for each probe.  The
-default is 3 seconds.
+default is 3.
 .SH EXAMPLES
 Please see the
 .I examples.txt
 file included in the
 .B tcptraceroute
-distribution for a few real\-life examples with more verbose
-explainations.
+distribution for a few real\-life examples.
 .P
 To trace the path to a webserver listening for connections on port 80:
 .P
@@ -116,14 +115,14 @@ the incorrect interface is being selected by default:
 .P
 .SH BUGS
 No error checking is performed on the source address specified by the \-s
-flag, and therefore
+flag, and it is therefore possible for 
 .B
 tcptraceroute
-should never be installed suid root, or unprivledged users will be able to
-generate arbitrary TCP SYN packets.
+to send out TCP SYN packets for which it has no chance of seeing a response
+to.
 .P
 Sending more than one probe to each hop is not currently supported, but
-should be trivial to implement in the future.
+should be trivial to implement in the future if desired.
 .P
 Complete portability to other Unix systems has not been tested;
 specifically,
@@ -137,7 +136,7 @@ is known to compile and function properly on Linux, OpenBSD, and FreeBSD
 systems.  If you run into complications on another platform, please let
 me know.
 .SH AUTHOR
-Michael C. Toren <michael@toren.net>
+Michael C. Toren <mct@toren.net>
 .SH AVAILABILITY
 For updates, please see:
 .br

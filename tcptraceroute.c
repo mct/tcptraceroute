@@ -1,8 +1,8 @@
 /* vim:set ts=4 sw=4 ai nobackup nocindent: */
 
 /*
- * tcptraceroute -- A traceroute implementation using TCP
- * Copyright (c) 2001, Michael C. Toren <michael@toren.net>
+ * tcptraceroute -- A traceroute implementation using TCP packets
+ * Copyright (c) 2001, Michael C. Toren <mct@toren.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -21,14 +21,6 @@
  */
 
 /*
- * Revision history:
- *
- *		Version 1.0 (2001-04-10)		Initial Release
- *
- * Updates are available from http://michael.toren.net/code/tcptraceroute/
- */
-
-/*
  * Requires libnet (http://www.packetfactory.net/libnet) and libpcap
  * (http://www.tcpdump.org/).  To compile, try something like:
  *
@@ -37,17 +29,34 @@
  */
 
 /*
+ * Revision history:
+ *
+ *	Version 1.1 (2001-06-30)
+ *
+ *		Now drops root privileges after sockets have been opened.
+ *
+ *		Must now be root to use -s or -p, making it now safe to to
+ *		install tcptraceroute suid root, without fear that users can
+ *		generate arbitrary SYN packets.
+ *
+ *	Version 1.0 (2001-04-10)
+ *
+ *		Initial Release
+ *
+ * Updates are available from http://michael.toren.net/code/tcptraceroute/
+ */
+
+/*
  * TODO:
  *
  * - There needs to be a better way to detect a timeout from pcap_next()
- * - Add support for sending more than one probe
- * - The size of the packets returned by libpcap should be checked before
- *   assuming that the entire header structure is there.
+ * - Add support for sending more than one probe.
+ * - RESOLVE_1918 should be a runtime, command line option.
  */
 
-#define VERSION "tcptraceroute 1.0 (2001-04-10)"
+#define VERSION "tcptraceroute 1.1 (2001-06-30)"
 #define BANNER  "\
-Copyright (c) 2001, Michael C. Toren <michael@toren.net>
+Copyright (c) 2001, Michael C. Toren <mct@toren.net>
 Updates are available from http://michael.toren.net/code/tcptraceroute/
 "
 
@@ -590,7 +599,6 @@ void trace(void)
 
 	printf("Tracing the path to %s on TCP port %s, %d hops max\n",
 		dst_name, dst_prt_name, maxttl);
-	initcapture();
 	
 	for (ttl = minttl, done = 0; !done && ttl <= maxttl; ttl++)
 	{
@@ -683,6 +691,7 @@ int main(int argc, char *argv[])
 
 				case 'p':
 					if (argc < 2) fatal("Argument required for -p\n");
+					if (getuid()) fatal("Sorry, must be root to use -p\n");
 					src_prt = atoi(argv[1]);
 					argc--, argv++;
 					break;
@@ -695,6 +704,7 @@ int main(int argc, char *argv[])
 
 				case 's':
 					if (argc < 2) fatal("Argument required for -s\n");
+					if (getuid()) fatal("Sorry, must be root to use -s\n");
 					src = argv[1];
 					argc--, argv++;
 					break;
@@ -727,6 +737,8 @@ int main(int argc, char *argv[])
 		dst_prt = 80;
 
 	defaults();
+	initcapture();
+	seteuid(getuid());
 	trace();
 
 	free(buf);

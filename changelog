@@ -1,0 +1,20 @@
+Extracted from tcptraceroute.c:
+
+/*
+ * Revision history:
+ *
+ *  Version 1.1 (2001-06-30)
+ *
+ *      Now drops root privileges after sockets have been opened.
+ *
+ *      Must now be root to use -s or -p, making it now safe to to
+ *      install tcptraceroute suid root, without fear that users can
+ *      generate arbitrary SYN packets.
+ *
+ *  Version 1.0 (2001-04-10)
+ *
+ *      Initial Release
+ *
+ * Updates are available from http://michael.toren.net/code/tcptraceroute/
+ */
+
