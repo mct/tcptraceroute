@@ -1,0 +1,158 @@
+
+# traceroute -f 7 www.ebay.com
+traceroute to pages.ebay.com (216.32.120.133), 30 hops max, 38 byte packets
+ 7  pnnj-01.core.exodus.net (192.157.69.25)  2.847 ms  2.751 ms  2.685 ms
+ 8  bbr01-s2-3.jrcy01.exodus.net (209.1.169.213)  4.937 ms  4.337 ms  6.294 ms
+ 9  bbr01-p5-0.hrnd01.exodus.net (209.185.249.214)  11.571 ms  11.386 ms  11.093 ms
+10  bbr01-p2-2.sntc03.exodus.net (216.32.173.85)  88.036 ms  88.607 ms  88.179 ms
+11  dcr04-g6-2.sntc03.exodus.net (216.33.153.100)  87.774 ms  88.526 ms  88.379 ms
+12  csr02-ve241.sntc03.exodus.net (216.33.153.189)  89.237 ms  88.730 ms  89.697 ms
+13  csr01-ve241.sntc03.exodus.net (216.33.153.188)  88.920 ms  89.312 ms  88.723 ms
+14  * * *
+15  * * *
+16  * * *
+
+# tcptraceroute -f 7 www.ebay.com
+Selected device eth0, address 207.8.132.210, port 3954 for outgoing packets
+Tracing the path to www.ebay.com (216.32.120.133) on TCP port 80 (www), 30 hops max
+ 7  pnnj-01.core.exodus.net (192.157.69.25)  2.607 ms
+ 8  bbr01-s2-3.jrcy01.exodus.net (209.1.169.213)  4.832 ms
+ 9  bbr01-p5-0.hrnd01.exodus.net (209.185.249.214)  10.229 ms
+10  bbr01-p2-2.sntc03.exodus.net (216.32.173.85)  87.989 ms
+11  dcr04-g6-2.sntc03.exodus.net (216.33.153.100)  87.695 ms
+12  csr02-ve241.sntc03.exodus.net (216.33.153.189)  88.237 ms
+13  csr01-ve241.sntc03.exodus.net (216.33.153.188)  89.423 ms
+14  216.32.160.6 (216.32.160.6)  70.678 ms
+15  10.1.2.7 (10.1.2.7)  75.286 ms
+16  pages.ebay.com (216.32.120.133) [open]  74.973 ms
+
+
+
+# traceroute -f 7 h.root-servers.net
+traceroute to h.root-servers.net (128.63.2.53), 30 hops max, 38 byte packets
+ 7  gbr1-p60.wswdc.ip.att.net (12.122.1.221)  5.825 ms  5.720 ms  5.335 ms
+ 8  ar6-a300s1.wswdc.ip.att.net (12.123.8.137)  5.917 ms  6.544 ms  5.994 ms
+ 9  12.125.12.158 (12.125.12.158)  81.454 ms  93.506 ms  93.092 ms
+10  washdcrref-cluster.att-disc.net (135.206.251.62)  81.641 ms  78.088 ms  81.490 ms
+11  arlbr-aip.att-disc.net (135.206.251.3)  159.634 ms  166.919 ms  81.352 ms
+12  gwborder.arl.army.mil (192.33.13.1)  80.858 ms  80.897 ms  80.971 ms
+13  * * *
+14  * * *
+15  * * *
+
+# tcptraceroute -f 7 h.root-servers.net
+Selected device eth0, address 207.8.132.210, port 3957 for outgoing packets
+Tracing the path to h.root-servers.net (128.63.2.53) on TCP port 80 (www), 30 hops max
+ 7  gbr1-p60.wswdc.ip.att.net (12.122.1.221)  5.423 ms
+ 8  ar6-a300s1.wswdc.ip.att.net (12.123.8.137)  6.436 ms
+ 9  12.125.12.158 (12.125.12.158)  82.176 ms
+10  washdcrref-cluster.att-disc.net (135.206.251.62)  81.832 ms
+11  arlbr-aip.att-disc.net (135.206.251.3)  81.002 ms
+12  gwborder.arl.army.mil (192.33.13.1)  81.009 ms
+13  *
+14  *
+15  *
+
+# tcptraceroute -f 7 h.root-servers.net 53
+Selected device eth0, address 207.8.132.210, port 3959 for outgoing packets
+Tracing the path to h.root-servers.net (128.63.2.53) on TCP port 53 (domain), 30 hops max
+ 7  gbr1-p60.wswdc.ip.att.net (12.122.1.221)  5.268 ms
+ 8  ar6-a300s1.wswdc.ip.att.net (12.123.8.137)  6.406 ms
+ 9  12.125.12.158 (12.125.12.158)  94.043 ms
+10  washdcrref-cluster.att-disc.net (135.206.251.62)  81.119 ms
+11  arlbr-aip.att-disc.net (135.206.251.3)  80.727 ms
+12  gwborder.arl.army.mil (192.33.13.1)  80.334 ms
+13  gw328-2.arl.army.mil (192.12.65.1)  80.817 ms
+14  h.root-servers.net (128.63.2.53) [open]  81.753 ms
+
+
+
+
+
+
+# traceroute -f 7 www.microsoft.com
+traceroute: Warning: www.microsoft.com has multiple addresses; using 207.46.230.229
+traceroute to www.microsoft.akadns.net (207.46.230.229), 30 hops max, 38 byte packets
+ 7  mae-east.dc-core.fddi11-0-100M.netaxs.net (207.106.127.101)  12.930 ms  6.870 ms  5.166 ms
+ 8  mae-peer.dc-core.netaxs.net (207.106.31.28)  5.377 ms  6.302 ms  6.694 ms
+ 9  mae-east-level3.com (198.32.187.97)  11.533 ms  9.633 ms  9.085 ms
+10  so-4-1-0.mp1.Washington1.level3.net (209.247.10.69)  9.113 ms  8.934 ms  9.425 ms
+11  loopback0.hsipaccess1.Seattle1.Level3.net (209.244.2.242)  79.067 ms  80.530 ms  81.878 ms
+12  63.211.220.82 (63.211.220.82)  81.131 ms  80.761 ms  80.402 ms
+13  207.46.190.117 (207.46.190.117)  83.148 ms  81.245 ms  80.695 ms
+14  207.46.129.48 (207.46.129.48)  81.483 ms  81.330 ms  81.680 ms
+15  iuscgsrfec7502-a4-00-1.cp.msft.net (207.46.190.46)  82.129 ms  83.381 ms  82.262 ms
+16  * * *
+17  * * *
+18  * * *
+
+# tcptraceroute -f 7 www.microsoft.com
+Selected device eth0, address 207.8.132.210, port 3968 for outgoing packets
+Tracing the path to www.microsoft.com (207.46.230.229) on TCP port 80 (www), 30 hops max
+ 7  mae-east.dc-core.fddi11-0-100M.netaxs.net (207.106.127.101)  5.326 ms
+ 8  mae-peer.dc-core.netaxs.net (207.106.31.28)  6.058 ms
+ 9  mae-east-level3.com (198.32.187.97)  9.029 ms
+10  so-4-1-0.mp1.Washington1.level3.net (209.247.10.69)  9.287 ms
+11  loopback0.hsipaccess1.Seattle1.Level3.net (209.244.2.242)  77.475 ms
+12  63.211.220.82 (63.211.220.82)  80.970 ms
+13  207.46.190.117 (207.46.190.117)  81.683 ms
+14  207.46.129.48 (207.46.129.48)  81.097 ms
+15  iuscgsrfec7502-a4-00-1.cp.msft.net (207.46.190.46)  81.974 ms
+16  207.46.224.197 (207.46.224.197)  82.428 ms
+17  microsoft.com (207.46.230.229) [open]  90.723 ms
+
+0[mct@quint:(1744) ~]$ tra ODC-T.ANKARA.AF.MIL
+traceroute to ODC-T.ANKARA.AF.MIL (207.133.163.7), 30 hops max, 38 byte packets
+ 1  netaxs.earthstation.net (207.106.186.129)  7.205 ms  10.214 ms  0.735 ms
+ 2  consh-colo-gsr.netaxs.com (207.106.32.13)  0.814 ms  0.680 ms  0.879 ms
+ 3  conshie-sdfc-l.netaxs.com (207.106.0.9)  0.881 ms  0.820 ms  1.221 ms
+ 4  sdfc-l3-l.netaxs.net (207.106.3.245)  1.375 ms  1.202 ms  1.570 ms
+ 5  nyc-l3.nyc-core.h3-0-45M.netaxs.net (207.106.127.18)  5.153 ms  3.845 ms  3.600 ms
+ 6  nyc-pos-l.netaxs.net (207.106.3.133)  9.577 ms  6.554 ms  6.823 ms
+ 7  main1-main2-ge.iad1.above.net (216.200.88.146)  6.366 ms  6.495 ms  7.301 ms
+ 8  core5-main1-oc48.iad1.above.net (208.185.0.113)  7.924 ms  6.839 ms  7.871 ms
+ 9  ewr1-iad1-oc3.ewr1.above.net (209.249.0.50)  11.587 ms  10.905 ms  10.508 ms
+10  sprint-nap.disa.mil (192.157.69.45)  11.200 ms  10.602 ms  10.673 ms
+11  206.38.100.10 (206.38.100.10)  141.677 ms  203.226 ms  174.996 ms
+12  140.35.200.202 (140.35.200.202)  131.086 ms  131.807 ms  131.769 ms
+13  140.35.16.18 (140.35.16.18)  252.633 ms  250.106 ms  252.305 ms
+14  198.26.165.18 (198.26.165.18)  265.132 ms  270.483 ms  265.097 ms
+15  * * *
+16  * * *
+17  * *
+0[mct@quint:(1746) ~]$ su
+Password:
+quint:/home/mct# src/rawip/tcptraceroute-1.0/tcptraceroute ODC-T.ANKARA.AF.MIL smtp
+Selected device eth0, address 207.8.132.210, port 2152 for outgoing packets
+Tracing the path to ODC-T.ANKARA.AF.MIL (207.133.163.7) on TCP port 25 (smtp), 30 hops max
+ 1  netaxs.earthstation.net (207.106.186.129)  1.036 ms
+ 2  consh-colo-gsr.netaxs.com (207.106.32.13)  0.766 ms
+ 3  conshie-sdfc-l.netaxs.com (207.106.0.9)  1.001 ms
+ 4  sdfc-l3-l.netaxs.net (207.106.3.245)  1.612 ms
+ 5  nyc-l3.nyc-core.h3-0-45M.netaxs.net (207.106.127.18)  5.149 ms
+ 6  nyc-pos-l.netaxs.net (207.106.3.133)  8.166 ms
+ 7  main1-main2-ge.iad1.above.net (216.200.88.146)  7.789 ms
+ 8  core5-main1-oc48.iad1.above.net (208.185.0.113)  7.087 ms
+ 9  ewr1-iad1-oc3.ewr1.above.net (209.249.0.50)  10.863 ms
+10  sprint-nap.disa.mil (192.157.69.45)  12.351 ms
+11  206.38.100.10 (206.38.100.10)  150.932 ms
+12  140.35.200.202 (140.35.200.202)  129.672 ms
+13  140.35.16.18 (140.35.16.18)  251.940 ms
+14  198.26.165.18 (198.26.165.18)  282.932 ms
+15  odctfw.ankara.af.mil (207.133.163.161)  274.036 ms
+16  odc-t.ankara.af.mil (207.133.163.7) [open]  273.526 ms
+
+=========================================================================
+
+CGI script to compare a udp, icmp, and tcp traceroute 
+
+
+OTHER IMPLEMENTATIONS
+---------------------
+
+tcptraceroute isn't the first implementation to use something other than
+UDP or ICMP ECHO packets.  Two others that you might be interested in are
+tracerx, and hping2, found at http://www.packetfactory.net/Projects/tracerx/
+and http://sourceforge.net/projects/hping2/, repectively.
+
+So, why did I bother writing tcptraceroute?  The idea of using TCP packets so

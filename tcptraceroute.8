@@ -1,0 +1,150 @@
+.TH TCPTRACEROUTE 8 "2001 April 10"
+.SH NAME
+tcptraceroute \- A traceroute implementation using TCP
+.SH SYNOPSIS
+.B tcptraceroute [\-n] [ \-i
+.I interface
+.B ] [ \-f
+.I first ttl 
+.B ]
+.br
+.B [ \-m
+.I max ttl
+.B ] [ \-p
+.I source port
+.B ] [ \-s
+.I source address
+.B ]
+.br
+.B [ \-w
+.I wait time
+.B ]
+.I host
+.B [
+.I destination port
+.B ]
+.SH DESCRIPTION
+.B tcptraceroute
+is a traceroute implementation using TCP.
+.P
+The more traditional
+.IR traceroute (8)
+sends out either UDP or ICMP ECHO packets with a TTL of one, and increments
+the TTL until the destination has been reached.  By printing the gateways that
+generate ICMP time exceeded messages along the way, it is able to determine the
+path packets are taking to reach the destination.  It is a very useful network
+diagnostic tool.
+.P
+The problem is that with the widespread use of firewalls on the modern
+Internet, many of the packets that
+.IR traceroute (8)
+sends out end up being filtered, making it impossible to completely trace the
+path to the destination.  However, in many cases, these firewalls will permit
+inbound TCP packets to specific ports that hosts sitting behind the
+firewall are listening for connections on.  By sending out TCP SYN packets
+instead of UDP or ICMP ECHO packets,
+.B tcptraceroute
+is able to bypass the most common firewall filters.
+.P
+It is worth noting that 
+.B tcptraceroute
+never completely establishes a TCP connection with the destination host.
+If the host is not listening for incoming connections, it will respond with
+an RST indicating that the port is closed.  If the hosts instead responds
+with a SYN|ACK, the port is known to be open, and an RST is sent by the
+kernel that
+.B tcptraceroute
+is running on to tear down the connection before the three\-way handshake has
+been completed.  This is the same half\-open scanning technique that
+.IR namp (1)
+uses when passed the
+.BR \-sS
+flag.
+.SH OPTIONS
+.IP \-n
+Display numeric output, rather than doing a reverse DNS lookup for each hop.
+Reverse lookups are never attempted on RFC1918 address space, regardless of
+the \-n flag.
+.IP \-i
+Use the specified interface for outgoing packets.  The default is to use
+the interface retuned by pcap_lookupdev(), which may or may not be
+appropriate on a multihomed host.
+.IP \-f
+Set the initial TTL used in the first outgoing packet.  The default is 1.
+.IP \-m
+Set the maximum TTL used in outgoing packets.  The default is 30.
+.IP \-p
+Use the specified local TCP port in outgoing packets.  The default is to
+obtain a free port from the kernel using
+.IR bind (2).
+Unlike with traditionial
+.IR traceroute (8),
+this number will not increase with each hop.
+.IP \-s
+Set the source address for outgoing packets.  See also the \-i flag.
+.IP \-d
+Enable debugging, which probably isn't very useful to you.
+.IP \-w
+Set the timeout, in seconds, to wait for a response for each probe.  The
+default is 3 seconds.
+.SH EXAMPLES
+Please see the
+.I examples.txt
+file included in the
+.B tcptraceroute
+distribution for a few real\-life examples with more verbose
+explainations.
+.P
+To trace the path to a webserver listening for connections on port 80:
+.P
+.RS
+.B tcptraceroute webserver
+.RE
+.P
+To trace the path to a nameserver listening for connections on port 53:
+.P
+.RS
+.B tcptraceroute nameserver 53
+.RE
+.P
+If the machine you are tracing from has more than one interface, and
+the incorrect interface is being selected by default:
+.P
+.RS
+.B tcptraceroute \-i eth1 host 
+.RE
+.P
+.SH BUGS
+No error checking is performed on the source address specified by the \-s
+flag, and therefore
+.B
+tcptraceroute
+should never be installed suid root, or unprivledged users will be able to
+generate arbitrary TCP SYN packets.
+.P
+Sending more than one probe to each hop is not currently supported, but
+should be trivial to implement in the future.
+.P
+Complete portability to other Unix systems has not been tested;
+specifically,
+.B
+tcptraceroute
+will not function on systems which modify the IP ID field of
+packets written to a raw socket.  As of the time of this writing,
+.B
+tcptraceroute
+is known to compile and function properly on Linux, OpenBSD, and FreeBSD
+systems.  If you run into complications on another platform, please let
+me know.
+.SH AUTHOR
+Michael C. Toren <michael@toren.net>
+.SH AVAILABILITY
+For updates, please see:
+.br
+.RS
+http://michael.toren.net/code/tcptraceroute/
+.RE
+.SH "SEE ALSO"
+.IR traceroute (8),
+.IR ping (8),
+.IR nmap (1)
