@@ -1,8 +1,8 @@
-A few real-life examples of using tcptraceroute to trace through firewalls
-that traceroute(8) has trouble with.  These are all sites that pass TCP SYN
-packets on to hosts sitting on the clean side of the firewall, and which
-don't filter ICMP time exceeded messages leaving their network.  All examples
-listed below were captured Sunday Night, July 1, 2001.
+A few real world examples of using tcptraceroute to trace through
+firewalls that traceroute(8) has trouble with.  These are all sites
+that pass TCP SYN packets on to hosts sitting on the clean side of the
+firewall, and which don't filter ICMP time exceeded messages leaving
+their network.  All examples listed below were captured on July 1st.
 
  -- Michael C. Toren <mct@toren.net>  Sun,  1 Jul 2001 21:25:26 -0400
 

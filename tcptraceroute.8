@@ -1,11 +1,19 @@
-.TH TCPTRACEROUTE 8 "2001 June 30"
+.TH TCPTRACEROUTE 8 "2001 July 31"
 .SH NAME
 tcptraceroute \- A traceroute implementation using TCP packets
 .SH SYNOPSIS
-.B tcptraceroute [\-n] [ \-i
+.B tcptraceroute [\-nFE] [ \-i
 .I interface
 .B ] [ \-f
 .I first ttl 
+.B ]
+.br
+.B [ \-l
+.I length
+.B ] [ \-q
+.I number of queries
+.B ] [ \-t
+.I tos
 .B ]
 .br
 .B [ \-m
@@ -23,6 +31,9 @@ tcptraceroute \- A traceroute implementation using TCP packets
 .B [
 .I destination port
 .B ]
+.B [
+.I length
+.B ]
 .SH DESCRIPTION
 .B tcptraceroute
 is a traceroute implementation using TCP packets.
@@ -32,8 +43,7 @@ The more traditional
 sends out either UDP or ICMP ECHO packets with a TTL of one, and increments
 the TTL until the destination has been reached.  By printing the gateways that
 generate ICMP time exceeded messages along the way, it is able to determine the
-path packets are taking to reach the destination.  It is a very useful network
-diagnostic tool.
+path packets are taking to reach the destination.
 .P
 The problem is that with the widespread use of firewalls on the modern
 Internet, many of the packets that
@@ -50,13 +60,14 @@ It is worth noting that
 .B tcptraceroute
 never completely establishes a TCP connection with the destination host.
 If the host is not listening for incoming connections, it will respond with
-an RST indicating that the port is closed.  If the hosts instead responds
+an RST indicating that the port is closed.  If the host instead responds
 with a SYN|ACK, the port is known to be open, and an RST is sent by the
-kernel that
+kernel
 .B tcptraceroute
-is running on to tear down the connection before the three\-way handshake has
-been completed.  This is the same half\-open scanning technique that
-.IR namp (1)
+is running on to tear down the connection without completing
+three\-way handshake.  This is the same half\-open scanning technique
+that
+.IR nmap (1)
 uses when passed the
 .BR \-sS
 flag.
@@ -65,10 +76,6 @@ flag.
 Display numeric output, rather than doing a reverse DNS lookup for each hop.
 Reverse lookups are never attempted on RFC1918 address space, regardless of
 the \-n flag.
-.IP \-i
-Use the specified interface for outgoing packets.  The default is to use
-the interface retuned by pcap_lookupdev(), which may or may not be
-appropriate on a multihomed host.
 .IP \-f
 Set the initial TTL used in the first outgoing packet.  The default is 1.
 .IP \-m
@@ -77,40 +84,48 @@ Set the maximum TTL used in outgoing packets.  The default is 30.
 Use the specified local TCP port in outgoing packets.  The default is to
 obtain a free port from the kernel using
 .IR bind (2).
-Unlike with traditionial
+Unlike with traditional
 .IR traceroute (8),
 this number will not increase with each hop.
 .IP \-s
 Set the source address for outgoing packets.  See also the \-i flag.
-.IP \-d
-Enable debugging, which probably isn't very useful to you.
+.IP \-i
+Use the specified interface for outgoing packets.
+.IP \-q
+Set the number of probes to be sent to each hop.  The default is 3.
+.IP \-t
+Set the IP type of service to be used in outgoing packets.  The default is
+to not set any type of service option.
+.IP \-F
+Set the "don't fragment" bit in outgoing packets.
+.IP \-E
+Send ECN SYN packets, as described in RFC2481.
 .IP \-w
 Set the timeout, in seconds, to wait for a response for each probe.  The
 default is 3.
+.IP \-l
+Set the total packet length to be used in outgoing packets.  If the length
+is greater than the minimum size required to assemble the necessary probe
+packet headers, this value is automatically increased.
+.IP \-d
+Enable debugging, which may or may not be useful.
 .SH EXAMPLES
 Please see the
 .I examples.txt
 file included in the
 .B tcptraceroute
-distribution for a few real\-life examples.
+distribution for a few real world examples.
 .P
-To trace the path to a webserver listening for connections on port 80:
+To trace the path to a web server listening for connections on port 80:
 .P
 .RS
 .B tcptraceroute webserver
 .RE
 .P
-To trace the path to a nameserver listening for connections on port 53:
+To trace the path to a mail server listening for connections on port 25:
 .P
 .RS
-.B tcptraceroute nameserver 53
-.RE
-.P
-If the machine you are tracing from has more than one interface, and
-the incorrect interface is being selected by default:
-.P
-.RS
-.B tcptraceroute \-i eth1 host 
+.B tcptraceroute mailserver 25
 .RE
 .P
 .SH BUGS
@@ -120,9 +135,6 @@ flag, and it is therefore possible for
 tcptraceroute
 to send out TCP SYN packets for which it has no chance of seeing a response
 to.
-.P
-Sending more than one probe to each hop is not currently supported, but
-should be trivial to implement in the future if desired.
 .P
 Complete portability to other Unix systems has not been tested;
 specifically,

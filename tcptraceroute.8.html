@@ -12,91 +12,106 @@
 tcptraceroute - A traceroute implementation using TCP packets 
 <H2><A NAME="sect1" HREF="#toc1">Synopsis</A></H2>
 <B>tcptraceroute
-[-n] [ -i</B> <I>interface</I> <B>] [ -f</B> <I>first</I> ttl  <B>]</B> <BR>
+[-nFE] [ -i</B> <I>interface</I> <B>] [ -f</B> <I>first</I> ttl  <B>]</B> <BR>
+<B>[ -l</B> <I>length</I> <B>] [ -q</B> <I>number</I> of queries <B>] [ -t</B> <I>tos</I> <B>]</B> <BR>
 <B>[ -m</B> <I>max</I> ttl <B>] [ -p</B> <I>source</I> port <B>] [ -s</B> <I>source</I> address <B>]</B> <BR>
-<B>[ -w</B> <I>wait</I> time <B>]</B> <I>host</I> <B>[</B> <I>destination</I> port <B>]</B> 
+<B>[ -w</B> <I>wait</I> time <B>]</B> <I>host</I> <B>[</B> <I>destination</I> port <B>]</B> <B>[</B> <I>length</I> <B>]</B> 
 <H2><A NAME="sect2" HREF="#toc2">Description</A></H2>
-<B>tcptraceroute</B> is a
-traceroute implementation using TCP packets. <P>
+<B>tcptraceroute</B>
+is a traceroute implementation using TCP packets. <P>
 The more traditional <I><I>traceroute</I>(8)</I>
 sends out either UDP or ICMP ECHO packets with a TTL of one, and increments
 the TTL until the destination has been reached.  By printing the gateways
 that generate ICMP time exceeded messages along the way, it is able to
-determine the path packets are taking to reach the destination.  It is a
-very useful network diagnostic tool. <P>
-The problem is that with the widespread
-use of firewalls on the modern Internet, many of the packets that <I><I>traceroute</I>(8)</I>
-sends out end up being filtered, making it impossible to completely trace
-the path to the destination.  However, in many cases, these firewalls will
-permit inbound TCP packets to specific ports that hosts sitting behind
-the firewall are listening for connections on.  By sending out TCP SYN packets
-instead of UDP or ICMP ECHO packets, <B>tcptraceroute</B> is able to bypass the
-most common firewall filters. <P>
-It is worth noting that  <B>tcptraceroute</B> never
-completely establishes a TCP connection with the destination host. If the
-host is not listening for incoming connections, it will respond with an
-RST indicating that the port is closed.  If the hosts instead responds with
-a SYN|ACK, the port is known to be open, and an RST is sent by the kernel
-that <B>tcptraceroute</B> is running on to tear down the connection before the
-three-way handshake has been completed.  This is the same half-open scanning
-technique that <I><I>namp</I>(1)</I> uses when passed the <B>-sS</B> flag. 
+determine the path packets are taking to reach the destination. <P>
+The problem
+is that with the widespread use of firewalls on the modern Internet, many
+of the packets that <I><I>traceroute</I>(8)</I> sends out end up being filtered, making
+it impossible to completely trace the path to the destination.  However,
+in many cases, these firewalls will permit inbound TCP packets to specific
+ports that hosts sitting behind the firewall are listening for connections
+on.  By sending out TCP SYN packets instead of UDP or ICMP ECHO packets,
+<B>tcptraceroute</B> is able to bypass the most common firewall filters. <P>
+It is
+worth noting that  <B>tcptraceroute</B> never completely establishes a TCP connection
+with the destination host. If the host is not listening for incoming connections,
+it will respond with an RST indicating that the port is closed.  If the
+host instead responds with a SYN|ACK, the port is known to be open, and
+an RST is sent by the kernel <B>tcptraceroute</B> is running on to tear down the
+connection without completing three-way handshake.  This is the same half-open
+scanning technique that <I><I>nmap</I>(1)</I> uses when passed the <B>-sS</B> flag. 
 <H2><A NAME="sect3" HREF="#toc3">Options</A></H2>
 
 <DL>
 
 <DT>-n</DT>
-<DD>Display numeric
-output, rather than doing a reverse DNS lookup for each hop. Reverse lookups
-are never attempted on RFC1918 address space, regardless of the -n flag.
-</DD>
-
-<DT>-i</DT>
-<DD>Use the specified interface for outgoing packets.  The default is to use
-the interface retuned by pcap_lookupdev(), which may or may not be appropriate
-on a multihomed host. </DD>
+<DD>Display
+numeric output, rather than doing a reverse DNS lookup for each hop. Reverse
+lookups are never attempted on RFC1918 address space, regardless of the
+-n flag. </DD>
 
 <DT>-f</DT>
-<DD>Set the initial TTL used in the first outgoing packet.
- The default is 1. </DD>
+<DD>Set the initial TTL used in the first outgoing packet.  The default
+is 1. </DD>
 
 <DT>-m</DT>
-<DD>Set the maximum TTL used in outgoing packets.  The default
-is 30. </DD>
+<DD>Set the maximum TTL used in outgoing packets.  The default is 30. </DD>
 
 <DT>-p</DT>
-<DD>Use the specified local TCP port in outgoing packets.  The default
-is to obtain a free port from the kernel using <I><I>bind</I>(2)</I>. Unlike with traditionial
-<I><I>traceroute</I>(8)</I>, this number will not increase with each hop. </DD>
+<DD>Use
+the specified local TCP port in outgoing packets.  The default is to obtain
+a free port from the kernel using <I><I>bind</I>(2)</I>. Unlike with traditional <I><I>traceroute</I>(8)</I>,
+this number will not increase with each hop. </DD>
 
 <DT>-s</DT>
-<DD>Set the source
-address for outgoing packets.  See also the -i flag. </DD>
+<DD>Set the source address for
+outgoing packets.  See also the -i flag. </DD>
 
-<DT>-d</DT>
-<DD>Enable debugging, which
-probably isn't very useful to you. </DD>
+<DT>-i</DT>
+<DD>Use the specified interface for
+outgoing packets. </DD>
+
+<DT>-q</DT>
+<DD>Set the number of probes to be sent to each hop.  The
+default is 3. </DD>
+
+<DT>-t</DT>
+<DD>Set the IP type of service to be used in outgoing packets.
+ The default is to not set any type of service option. </DD>
+
+<DT>-F</DT>
+<DD>Set the "don't fragment"
+bit in outgoing packets. </DD>
+
+<DT>-E</DT>
+<DD>Send ECN SYN packets, as described in RFC2481.
+</DD>
 
 <DT>-w</DT>
-<DD>Set the timeout, in seconds, to wait
-for a response for each probe.  The default is 3. </DD>
+<DD>Set the timeout, in seconds, to wait for a response for each probe.  The
+default is 3. </DD>
+
+<DT>-l</DT>
+<DD>Set the total packet length to be used in outgoing packets.
+ If the length is greater than the minimum size required to assemble the
+necessary probe packet headers, this value is automatically increased. </DD>
+
+<DT>-d</DT>
+<DD>Enable
+debugging, which may or may not be useful. </DD>
 </DL>
 
 <H2><A NAME="sect4" HREF="#toc4">Examples</A></H2>
-Please see the
-<I>examples.txt</I> file included in the <B>tcptraceroute</B> distribution for a few real-life
-examples. <P>
-To trace the path to a webserver listening for connections on
-port 80: <P>
+Please see the <I>examples.txt</I>
+file included in the <B>tcptraceroute</B> distribution for a few real world examples.
+<P>
+To trace the path to a web server listening for connections on port 80:
+<P>
 <blockquote><B>tcptraceroute webserver</B> </blockquote>
 <P>
-To trace the path to a nameserver listening
-for connections on port 53: <P>
-<blockquote><B>tcptraceroute nameserver 53</B> </blockquote>
-<P>
-If the machine
-you are tracing from has more than one interface, and the incorrect interface
-is being selected by default: <P>
-<blockquote><B>tcptraceroute -i eth1 host </B> </blockquote>
+To trace the path to a mail server listening for
+connections on port 25: <P>
+<blockquote><B>tcptraceroute mailserver 25</B> </blockquote>
 <P>
 
 <H2><A NAME="sect5" HREF="#toc5">Bugs</A></H2>
@@ -104,20 +119,17 @@ No error checking
 is performed on the source address specified by the -s flag, and it is therefore
 possible for  <B></B> tcptraceroute to send out TCP SYN packets for which it has
 no chance of seeing a response to. <P>
-Sending more than one probe to each hop
-is not currently supported, but should be trivial to implement in the future
-if desired. <P>
-Complete portability to other Unix systems has not been tested;
-specifically, <B></B> tcptraceroute will not function on systems which modify
-the IP ID field of packets written to a raw socket.  As of the time of this
-writing, <B></B> tcptraceroute is known to compile and function properly on Linux,
-OpenBSD, and FreeBSD systems.  If you run into complications on another
-platform, please let me know. 
+Complete portability to other Unix systems
+has not been tested; specifically, <B></B> tcptraceroute will not function on
+systems which modify the IP ID field of packets written to a raw socket.
+ As of the time of this writing, <B></B> tcptraceroute is known to compile and
+function properly on Linux, OpenBSD, and FreeBSD systems.  If you run into
+complications on another platform, please let me know. 
 <H2><A NAME="sect6" HREF="#toc6">Author</A></H2>
-Michael C. Toren &lt;mct@toren.net&gt; 
+Michael C. Toren
+&lt;mct@toren.net&gt; 
 <H2><A NAME="sect7" HREF="#toc7">Availability</A></H2>
-For
-updates, please see: <BR>
+For updates, please see: <BR>
 <blockquote><I>http://michael.toren.net/code/tcptraceroute/</I> </blockquote>
 
 <H2><A NAME="sect8" HREF="#toc8">See Also</A></H2>

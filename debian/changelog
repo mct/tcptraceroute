@@ -1,3 +1,10 @@
+tcptraceroute (1.2-0potato1) stable; urgency=low
+
+  * New upstream version.
+  * Closes: #106666: /etc/services ports read wrong
+
+ -- Michael C. Toren <mct@toren.net>  Tue, 31 Jul 2001 23:22:04 -0400
+
 tcptraceroute (1.1-1) unstable; urgency=low
 
   * Initial Release.

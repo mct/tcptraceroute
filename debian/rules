@@ -8,14 +8,16 @@
 # This is the debhelper compatability version to use.
 export DH_COMPAT=1
 
+ifneq (,$(findstring debug,$(DEB_BUILD_OPTIONS)))
+export CFLAGS = -O2 -Wall -g
+endif
+
 build: build-stamp
 build-stamp:
 	dh_testdir
 
-	
 	# Add here commands to compile the package.
-	$(MAKE) tcptraceroute changelog man
-
+	$(MAKE) tcptraceroute
 	touch build-stamp
 
 clean:
@@ -60,13 +62,14 @@ binary-arch: build install
 #	dh_undocumented
 	dh_installchangelogs changelog
 	dh_link
+ifeq (,$(findstring nostrip,$(DEB_BUILD_OPTIONS)))
 	dh_strip
+endif
 	dh_compress
 	dh_fixperms
 	# You may want to make some executables suid here.
 	chmod 4755 debian/tmp/usr/sbin/tcptraceroute
 	chown root.root debian/tmp/usr/sbin/tcptraceroute
-	dh_suidregister
 #	dh_makeshlibs
 	dh_installdeb
 #	dh_perl

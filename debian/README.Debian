@@ -1,5 +1,0 @@
-As of the time of this writing, this is not an official Debian package, and
-will not automatically be upgraded when you do an apt-get dist-upgrade.  For
-updates, please see http://michael.toren.net/code/tcptraceroute/.
-
- -- Michael C. Toren <mct@toren.net>, Sun,  1 Jul 2001 13:33:41 -0400

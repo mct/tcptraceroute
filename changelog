@@ -3,6 +3,46 @@ Extracted from tcptraceroute.c:
 /*
  * Revision history:
  *
+ *  Version 1.2 (2001-07-31)
+ *
+ *      Contains large portions of code and ideas contributed by
+ *      Scott Gifford <sgifford@tir.com>
+ *      
+ *      Attempt to determine what outgoing interface to use based on the
+ *      destination address and the local system's interface list.  Could
+ *      still use a good deal of work on BSD systems, though, especially
+ *      when it comes to virtual addresses which reside on subnets
+ *      different than the primary address.
+ *      
+ *      The timeout code has been reworked significantly, and should now
+ *      be much more reliable.
+ *      
+ *      Added -E command line argument to send ECN (RFC2481) packets.
+ *      Requested by Christophe Barb <christophe.barbe@lineo.fr> and
+ *      Jim Penny <jpenny@debian.org>
+ *      
+ *      Added -l command line argument to set the total packet length,
+ *      including IP header.
+ *      
+ *      Added support for sending more than one probe to each hop, and
+ *      the -q command line option to specify the number of probes.
+ *      
+ *      Added -F command line argument to set the IP_DF bit.
+ *      
+ *      Added -t command line argument to set the IP TOS.
+ *      
+ *      Now properly checks the length of the packets returned by libpcap
+ *      before blindly assuming that the entire header structure we happen
+ *      to be looking for is there.  This could have been very ugly had the
+ *      snaplen not been set so conservatively.
+ *      
+ *      Print banner information to stderr, not stdout, to be compatible
+ *      with traceroute(8).  Reported by Scott Fenton <scott@matts-books.com>
+ *
+ *      Fixed an endian bug reported by Zoran Dzelajlija <jelly@srk.fer.hr>,
+ *      which prevented users from specifying the destination port number by
+ *      name.
+ *
  *  Version 1.1 (2001-06-30)
  *
  *      Now drops root privileges after sockets have been opened.
@@ -14,7 +54,5 @@ Extracted from tcptraceroute.c:
  *  Version 1.0 (2001-04-10)
  *
  *      Initial Release
- *
- * Updates are available from http://michael.toren.net/code/tcptraceroute/
  */
 

@@ -1,7 +1,7 @@
 Begin4
 Title:		tcptraceroute
-Version:	1.1
-Entered-date:	2001-06-30
+Version:	1.2
+Entered-date:	2001-07-31
 Description:	A traceroute implementation using TCP packets
 Keywords:	network, traceroute, firewall
 Author:		mct@toren.net (Michael C. Toren)
