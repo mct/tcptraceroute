@@ -73,10 +73,10 @@ VERSION = @VERSION@
 
 bin_PROGRAMS = tcptraceroute
 tcptraceroute_SOURCES = tcptraceroute.c
-man_MANS = tcptraceroute.8
+man_MANS = tcptraceroute.1
 
 docdir = $(datadir)/doc/tcptraceroute
-doc_DATA = AUTHORS COPYING ChangeLog NEWS README 	examples.txt tcptraceroute.8.html tcptraceroute.lsm
+doc_DATA = AUTHORS COPYING ChangeLog NEWS README 	examples.txt tcptraceroute.1.html tcptraceroute.lsm
 
 
 EXTRA_DIST = $(doc_DATA) $(man_MANS) VERSION debian
@@ -99,7 +99,7 @@ CFLAGS = @CFLAGS@
 COMPILE = $(CC) $(DEFS) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
 CCLD = $(CC)
 LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(LDFLAGS) -o $@
-man8dir = $(mandir)/man8
+man1dir = $(mandir)/man1
 MANS = $(man_MANS)
 
 NROFF = nroff
@@ -211,12 +211,12 @@ tcptraceroute: $(tcptraceroute_OBJECTS) $(tcptraceroute_DEPENDENCIES)
 	@rm -f tcptraceroute
 	$(LINK) $(tcptraceroute_LDFLAGS) $(tcptraceroute_OBJECTS) $(tcptraceroute_LDADD) $(LIBS)
 
-install-man8:
-	$(mkinstalldirs) $(DESTDIR)$(man8dir)
-	@list='$(man8_MANS)'; \
+install-man1:
+	$(mkinstalldirs) $(DESTDIR)$(man1dir)
+	@list='$(man1_MANS)'; \
 	l2='$(man_MANS)'; for i in $$l2; do \
 	  case "$$i" in \
-	    *.8*) list="$$list $$i" ;; \
+	    *.1*) list="$$list $$i" ;; \
 	  esac; \
 	done; \
 	for i in $$list; do \
@@ -225,30 +225,30 @@ install-man8:
 	  ext=`echo $$i | sed -e 's/^.*\\.//'`; \
 	  inst=`echo $$i | sed -e 's/\\.[0-9a-z]*$$//'`; \
 	  inst=`echo $$inst | sed '$(transform)'`.$$ext; \
-	  echo " $(INSTALL_DATA) $$file $(DESTDIR)$(man8dir)/$$inst"; \
-	  $(INSTALL_DATA) $$file $(DESTDIR)$(man8dir)/$$inst; \
+	  echo " $(INSTALL_DATA) $$file $(DESTDIR)$(man1dir)/$$inst"; \
+	  $(INSTALL_DATA) $$file $(DESTDIR)$(man1dir)/$$inst; \
 	done
 
-uninstall-man8:
-	@list='$(man8_MANS)'; \
+uninstall-man1:
+	@list='$(man1_MANS)'; \
 	l2='$(man_MANS)'; for i in $$l2; do \
 	  case "$$i" in \
-	    *.8*) list="$$list $$i" ;; \
+	    *.1*) list="$$list $$i" ;; \
 	  esac; \
 	done; \
 	for i in $$list; do \
 	  ext=`echo $$i | sed -e 's/^.*\\.//'`; \
 	  inst=`echo $$i | sed -e 's/\\.[0-9a-z]*$$//'`; \
 	  inst=`echo $$inst | sed '$(transform)'`.$$ext; \
-	  echo " rm -f $(DESTDIR)$(man8dir)/$$inst"; \
-	  rm -f $(DESTDIR)$(man8dir)/$$inst; \
+	  echo " rm -f $(DESTDIR)$(man1dir)/$$inst"; \
+	  rm -f $(DESTDIR)$(man1dir)/$$inst; \
 	done
 install-man: $(MANS)
 	@$(NORMAL_INSTALL)
-	$(MAKE) $(AM_MAKEFLAGS) install-man8
+	$(MAKE) $(AM_MAKEFLAGS) install-man1
 uninstall-man:
 	@$(NORMAL_UNINSTALL)
-	$(MAKE) $(AM_MAKEFLAGS) uninstall-man8
+	$(MAKE) $(AM_MAKEFLAGS) uninstall-man1
 
 install-docDATA: $(doc_DATA)
 	@$(NORMAL_INSTALL)
@@ -373,7 +373,7 @@ all-redirect: all-am
 install-strip:
 	$(MAKE) $(AM_MAKEFLAGS) AM_INSTALL_PROGRAM_FLAGS=-s install
 installdirs:
-	$(mkinstalldirs)  $(DESTDIR)$(bindir) $(DESTDIR)$(mandir)/man8 \
+	$(mkinstalldirs)  $(DESTDIR)$(bindir) $(DESTDIR)$(mandir)/man1 \
 		$(DESTDIR)$(docdir)
 
 
@@ -416,7 +416,7 @@ maintainer-clean: maintainer-clean-am
 mostlyclean-binPROGRAMS distclean-binPROGRAMS clean-binPROGRAMS \
 maintainer-clean-binPROGRAMS uninstall-binPROGRAMS install-binPROGRAMS \
 mostlyclean-compile distclean-compile clean-compile \
-maintainer-clean-compile install-man8 uninstall-man8 install-man \
+maintainer-clean-compile install-man1 uninstall-man1 install-man \
 uninstall-man uninstall-docDATA install-docDATA tags mostlyclean-tags \
 distclean-tags clean-tags maintainer-clean-tags distdir info-am info \
 dvi-am dvi check check-am installcheck-am installcheck all-recursive-am \

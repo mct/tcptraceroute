@@ -3,7 +3,7 @@
 # Process this file with autoconf to produce a configure script.
 
 # Initialization.
-AC_PREREQ(2.57)
+AC_PREREQ(2.50)
 
 AC_INIT(tcptraceroute)
 AC_CANONICAL_SYSTEM
@@ -32,6 +32,8 @@ AC_ARG_WITH(libpcap, AC_HELP_STRING([--with-libpcap=DIR], [use libpcap in DIR]),
 		test -f "$withval/include/pcap.h"	&&	CPPFLAGS="$CPPFLAGS -I$withval/include"
 
 		test -f "$withval/pcap.a"			&&	LDFLAGS="$LDFLAGS -L$withval"
+		test -f "$withval/libpcap.a"		&&	LDFLAGS="$LDFLAGS -L$withval"
+		test -f "$withval/lib/pcap.a"		&&	LDFLAGS="$LDFLAGS -L$withval/lib"
 		test -f "$withval/lib/libpcap.a"	&&	LDFLAGS="$LDFLAGS -L$withval/lib"
 	], [])
 AC_CHECK_LIB(pcap, pcap_open_live, , [AC_MSG_ERROR([cannot find libpcap])])
@@ -100,7 +102,7 @@ AC_COMPILE_IFELSE(
 AC_FUNC_MALLOC
 # AC_FUNC_REALLOC	# our tcptraceroute.c:xrealloc() function deals with 
 					# the realloc(0,0) case, and AC_FUNC_REALLOC doesn't
-					# appear to break on IRIX systems.
+					# appear to break on HP/UX systems.
 AC_FUNC_SELECT_ARGTYPES
 AC_FUNC_VPRINTF
 AC_CHECK_FUNCS([gettimeofday memset select socket strchr])
@@ -109,7 +111,6 @@ AC_CHECK_FUNCS([gettimeofday memset select socket strchr])
 #AC_SUBST(AM_CFLAGS)
 #AC_SUBST(CPPFLAGS)
 #AC_SUBST(NO_MINUS_C_MINUS_O)
-
 
 # Is this Solaris?
 AC_MSG_CHECKING(for Solaris)
@@ -182,7 +183,7 @@ AC_ARG_ENABLE(track-default,
 if test "$TRACK_DEFAULT" = "port"; then
 	AC_DEFINE(TRACK_PORT_DEFAULT, 1, [Track ports by default])
 else
-	AC_DEFINE(TRACK_ID_DEFAULT, 1, [Track IP IDs by default])
+	AC_DEFINE(TRACK_PORT_DEFAULT, 0, [Track ports by default])
 fi
 
 # Handle --enable-default-port=N
@@ -214,6 +215,6 @@ AC_ARG_ENABLE(static,
 		fi
 	], [])
 
-
+AC_DEFINE_UNQUOTED(TARGET, "$target", [Target platform])
 AC_CONFIG_FILES(Makefile)
 AC_OUTPUT

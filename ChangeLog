@@ -1,3 +1,22 @@
+Version 1.5beta5 (2003-07-02)
+
+    Now functions properly with libpcap when using an interface without a
+    valid IPv4 addresss.  Reported by Kris Shannon <kris@sisgroup.com.au>
+    in Debian Bug#183456.
+
+    Improved autoconf handling of the --with-libpcap= command line argument,
+    by Richard van den Berg <richard@vdberg.org>.
+
+    Moved the tcptraceroute man page from section 1 to section 8 now that
+    tcptraceroute is installed in /usr/bin by default, as suggested by
+    James Ralston <ralston@pobox.com>.
+
+    Added a missing call to pcap_freecode() to free up memory utilized
+    by the bpf_program struct, after applying it with pcap_setfilter().
+
+    Should now deal better (and skip over) unconfigured interface under
+    NetBSD.
+
 Version 1.5beta4 (2003-06-29)
 
     A call to seteuid() has been replaced with a call to setuid() to fully
@@ -5,12 +24,12 @@ Version 1.5beta4 (2003-06-29)
     portions of tcptraceroute, older versions are still believed to be
     safe even without fully dropping privileges, however users are still
     encouraged to upgrade to provide a measure of containment in the event
-    that an exploitable flaw is discovered in the future.  Reported by
-    David Coe <davidc@debian.org> and Matt Zimmerman <mdz@debian.org>,
-    and published in Debian Security Advisory DSA 330-1.
+    that an exploitable flaw is discovered in the future.  Reported by Matt
+    Zimmerman <mdz@debian.org>, and published in Debian Security Advisory
+    DSA 330-1.
 
     AC_FUNC_REALLOC was commented out of configure.ac, which was failing on
-    IRIX badly systems.  The xrealloc() function in tcptraceroute already
+    HP/UX badly systems.  The xrealloc() function in tcptraceroute already
     works around the realloc(0,0) case that AC_FUNC_REALLOC is attempting
     to prevent against, anyway.  Reported by Petter Reinholdtsen
     <pere@hungry.com>.
@@ -38,7 +57,7 @@ Version 1.5beta1 (2003-05-24)
 
         jbash@velvet.com
         Jon Allen Boone <ipmonger@delamancha.org>
-        James Ralston <qralston@andrew.cmu.edu>
+        James Ralston <ralston@pobox.com>
         Darren Tucker <dtucker@zip.com.au>
         Matt Weidner <mattweidner@webmail.co.za>
     
@@ -51,6 +70,7 @@ Version 1.5beta1 (2003-05-24)
     Removed a number of multi-line strings, which apparently causes
     trouble for some compilers, based on patches from:
 
+        jbash@velvet.com
         Richard van den Berg <richard@vdberg.org>
         Petter Reinholdtsen <pere@hungry.com>
 

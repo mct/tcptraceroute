@@ -613,7 +613,11 @@ void getinterfaces(void)
 		salen = sizeof(*ifrp);
 
 		if (ioctl(s, SIOCGIFADDR, &ifr) < 0)
-			pfatal("ioctl(SIOCGIFADDR)");
+		{
+			debug("ioctl(SIOCGIFADDR) on unconfigured interface %s failed; skipping\n",
+				sprintable(ifr.ifr_name));
+			continue;
+		}
 		addr = ((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr.s_addr;
 
 #endif /* HAVE_SOCKADDR_SA_LEN else */
@@ -1115,11 +1119,12 @@ void initcapture(void)
 
 	debug("pcap filter is: %s\n", o_nofilter ? "(nothing)" : filter);
 
-	localnet = 0;
-	netmask = 0;
-
 	if (pcap_lookupnet(device, &localnet, &netmask, errbuf) < 0)
-		fatal("pcap_lookupnet failed: %s\n", errbuf);
+	{
+		warn("pcap_lookupnet failed: %s\n", errbuf);
+		localnet = 0;
+		netmask = 0;
+	}
 
 	if (pcap_compile(pcap, &fcode, filter, 1, netmask) < 0)
 		fatal("filter compile failed: %s", pcap_geterr(pcap));
@@ -1130,6 +1135,8 @@ void initcapture(void)
 	pcap_fd = pcap_fileno(pcap);
 	if (fcntl(pcap_fd, F_SETFL, O_NONBLOCK) < 0)
 		pfatal("fcntl(F_SETFL, O_NONBLOCK) failed");
+
+	pcap_freecode(&fcode);
 }
 
 /*
@@ -1867,7 +1874,7 @@ int main(int argc, char **argv)
 
 			case 'd':
 				o_debug++;
-				debug("%s %s\n", PACKAGE, VERSION);
+				debug("%s %s, %s\n", PACKAGE, VERSION, TARGET);
 				debug("Compiled with libpcap %s, libnet %s (API %d)\n",
 					pcap_version, LIBNET_VERSION, LIBNET_API_VERSION);
 				break;
