@@ -2,7 +2,7 @@
 .SH NAME
 tcptraceroute \- A traceroute implementation using TCP packets
 .SH SYNOPSIS
-.B tcptraceroute [\-nFE] [ \-i
+.B tcptraceroute [\-nNFSAE] [ \-i
 .I interface
 .B ] [ \-f
 .I first ttl 
@@ -74,8 +74,10 @@ flag.
 .SH OPTIONS
 .IP \-n
 Display numeric output, rather than doing a reverse DNS lookup for each hop.
-Reverse lookups are never attempted on RFC1918 address space, regardless of
-the \-n flag.
+By default, reverse lookups are never attempted on RFC1918 address space,
+regardless of the \-n flag.
+.IP \-N
+Perform a reverse DNS lookup for each hop, including RFC1918 addresses.
 .IP \-f
 Set the initial TTL used in the first outgoing packet.  The default is 1.
 .IP \-m
@@ -93,16 +95,22 @@ Set the source address for outgoing packets.  See also the \-i flag.
 Use the specified interface for outgoing packets.
 .IP \-q
 Set the number of probes to be sent to each hop.  The default is 3.
-.IP \-t
-Set the IP type of service to be used in outgoing packets.  The default is
-to not set any type of service option.
-.IP \-F
-Set the "don't fragment" bit in outgoing packets.
-.IP \-E
-Send ECN SYN packets, as described in RFC2481.
 .IP \-w
 Set the timeout, in seconds, to wait for a response for each probe.  The
 default is 3.
+.IP \-S
+Set the TCP SYN flag in outgoing packets.  This is the default, if neither
+\-S or \-A is specified.
+.IP \-A
+Set the TCP ACK flag in outgoing packets.  By doing so, it is possible to
+trace through stateless firewalls which permit outgoing TCP connections.
+.IP \-E
+Send ECN SYN packets, as described in RFC2481.
+.IP \-t
+Set the IP TOS (type of service) to be used in outgoing packets.  The
+default is not to set any TOS.
+.IP \-F
+Set the IP "don't fragment" bit in outgoing packets.
 .IP \-l
 Set the total packet length to be used in outgoing packets.  If the length
 is greater than the minimum size required to assemble the necessary probe
@@ -127,7 +135,6 @@ To trace the path to a mail server listening for connections on port 25:
 .RS
 .B tcptraceroute mailserver 25
 .RE
-.P
 .SH BUGS
 No error checking is performed on the source address specified by the \-s
 flag, and it is therefore possible for 
@@ -135,18 +142,6 @@ flag, and it is therefore possible for
 tcptraceroute
 to send out TCP SYN packets for which it has no chance of seeing a response
 to.
-.P
-Complete portability to other Unix systems has not been tested;
-specifically,
-.B
-tcptraceroute
-will not function on systems which modify the IP ID field of
-packets written to a raw socket.  As of the time of this writing,
-.B
-tcptraceroute
-is known to compile and function properly on Linux, OpenBSD, and FreeBSD
-systems.  If you run into complications on another platform, please let
-me know.
 .SH AUTHOR
 Michael C. Toren <mct@toren.net>
 .SH AVAILABILITY

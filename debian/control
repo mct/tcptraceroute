@@ -2,7 +2,7 @@ Source: tcptraceroute
 Section: net
 Priority: optional
 Maintainer: Michael C. Toren <mct@toren.net>
-Build-Depends: perl, libnet0-dev, debhelper
+Build-Depends: libnet0-dev, debhelper, libpcap-dev
 Standards-Version: 3.5.5
 
 Package: tcptraceroute

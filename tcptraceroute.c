@@ -1,14 +1,13 @@
 /* -*- Mode: c; tab-width: 4; indent-tabs-mode: 1; c-basic-offset: 4; -*- */
-/* vim:set ts=4 sw=4 ai nobackup nocindent: */
+/* vim:set ts=4 sw=4 ai nobackup nocindent sm: */
 
 /*
  * tcptraceroute -- A traceroute implementation using TCP packets
- * Copyright (c) 2001, Michael C. Toren <mct@toren.net>
+ * Copyright (c) 2001, 2002  Michael C. Toren <mct@toren.net>
  *
  * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License as published by the Free
- * Software Foundation; either version 2 of the License, or (at your option)
- * any later version.
+ * under the terms of the GNU General Public License, version 2, as published
+ * by the Free Software Foundation.
  *
  * This program is distributed in the hope that it will be useful, but
  * WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
@@ -31,27 +30,99 @@
  * Updates are available from http://michael.toren.net/code/tcptraceroute/
  */
 
+#define VERSION "tcptraceroute 1.3 (2002-05-19)"
+#define BANNER  "Copyright (c) 2001, 2002 Michael C. Toren <mct@toren.net>\n\
+Updates are available from http://michael.toren.net/code/tcptraceroute/\n"
+
 /*
  * Revision history:
+ *
+ *	Version 1.3 (2002-05-19)
+ *
+ *		Now detects (and ignores) IP packets with IP options.
+ *
+ *		Packets are now properly aligned by allocating new space and
+ *		copying the packet data there before casting packet header
+ *		structs against them.
+ *
+ *		New, undocumented --no-select command line argument added to never
+ *		call select(), which fails to indicate that a BPF socket is ready
+ *		for reading on some BSD systems.
+ *
+ *		Now sets a non-zero exit code if the destination was not reached,
+ *		as suggested by Arndt Schoenewald <arndt@schoenewald.de>
+ *
+ *		Fixes an off-by-one error in getinterfaces(), discovered by
+ *		Kit Knox <kit@rootshell.com>.
+ *
+ *		probe() and capture() now use a new proberecord structure which
+ *		contains information about each probe in a modularized way.
+ *
+ *		Added a new command line argument, --track-port, which causes each
+ *		probe to have a unique source port so that something other than the
+ *		IP ID can be used to track it, and also a corresponding --track-id
+ *		argument to specify the old behavior of tracking IP ID's.  If a
+ *		source port is specified with -p, --track-id is implied.  The
+ *		compile-time default on Solaris is --track-port, enabling
+ *		tcptraceroute to work out-of-the-box, and --track-id on all other
+ *		platforms.
+ *
+ *		probe() now calls allocateid() to generate an IP ID, which
+ *		caches the last ALLOCATEID_CACHE_SIZE allocations to prevent
+ *		against duplicates.
+ *
+ *		Display "!<N>" instead of "!?" for unknown ICMP codes, as
+ *		suggested by Kevin McAllister <kevin@mcallister.net>
+ *
+ *		Attempts to find virtual addresses under OpenBSD, based on a
+ *		patch by Scott Gifford <sgifford@tir.com>
+ *
+ *		Moves the datalinkoffset and datalinkname information into a
+ *		single data structure, which is much more logical, and less
+ *		prone to error.
+ *
+ *		Improved command line argument handling a good deal, based
+ *		on suggestions by Scott Fenton <scott@matts-books.com>.  First,
+ *		a pass through is made to process and shift out long command
+ *		line arguments, then the remaining command line is passed to
+ *		getopt().
+ *
+ *		It is now possible to traceroute to yourself, by switching the
+ *		device to the loopback interface if the destination matches the
+ *		address of a local interface.  Additionally, as learned by
+ *		looking through the nmap source, we now never set a libpcap
+ *		filter on the loopback interface to avoid apparent libpcap bugs
+ *		which previously made it impossible to traceroute to 127.0.0.1
+ *
+ *		Added -S and -A command line arguments to control the SYN
+ *		and ACK flags in outgoing packets.  By using -A, it is now
+ *		possible to traceroute through stateless firewalls which
+ *		permit hosts behind the firewalls to establish outgoing TCP
+ *		connections.  In the absence of either -A or -S, -S is set.
+ *
+ *		Added -N command line argument which takes the place of the
+ *		previous RESOLVE_RFC1918 #define.
+ *
+ *		Now displays if the remote host is ECN capable when using -E
  *
  *	Version 1.2 (2001-07-31)
  *
  *		Contains large portions of code and ideas contributed by
  *		Scott Gifford <sgifford@tir.com>
+ *
+ *		Attempt to determine what outgoing interface to use based on
+ *		the destination address and the local system's interface list.
+ *		Could still use a good deal of work on BSD systems, though,
+ *		especially when it comes to virtual addresses which reside on
+ *		subnets different than the primary address.
  *		
- *		Attempt to determine what outgoing interface to use based on the
- *		destination address and the local system's interface list.  Could
- *		still use a good deal of work on BSD systems, though, especially
- *		when it comes to virtual addresses which reside on subnets
- *		different than the primary address.
- *		
- *		The timeout code has been reworked significantly, and should now
- *		be much more reliable.
+ *		The timeout code has been reworked significantly, and should
+ *		now be much more reliable.
  *		
  *		Added -E command line argument to send ECN (RFC2481) packets.
  *		Requested by Christophe Barb <christophe.barbe@lineo.fr> and
  *		Jim Penny <jpenny@debian.org>
- *		
+ *
  *		Added -l command line argument to set the total packet length,
  *		including IP header.
  *		
@@ -67,8 +138,8 @@
  *		to be looking for is there.  This could have been very ugly had the
  *		snaplen not been set so conservatively.
  *		
- *		Print banner information to stderr, not stdout, to be compatible
- *		with traceroute(8).  Reported by Scott Fenton <scott@matts-books.com>
+ *		Print banner information to stderr, not stdout, to be compatible with
+ *		traceroute(8).  Reported by Scott Fenton <scott@matts-books.com>
  *
  *		Fixed an endian bug reported by Zoran Dzelajlija <jelly@srk.fer.hr>,
  *		which prevented users from specifying the destination port number by
@@ -78,24 +149,23 @@
  *
  *		Now drops root privileges after sockets have been opened.
  *
- *		Must now be root to use -s or -p, making it now safe to to
- *		install tcptraceroute suid root, without fear that users can
- *		generate arbitrary SYN packets.
+ *		Must now be root to use -s or -p, making it now safe to to install
+ *		tcptraceroute suid root, without fear that users can generate arbitrary
+ *		SYN packets.
  *
  *	Version 1.0 (2001-04-10)
  *
- *		Initial Release
+ *		Initial Release.
  */
 
 /*
  * TODO:
  *
- * - RESOLVE_1918 should be a runtime, command line option.
- * - Command line arguments could be handled better.
- * - Display if the remote host is ECN capable when using o_ecn?
- * - Currently it is not possible to traceroute to yourself.
- * - finddev() doesn't detect virtual addresses on BSD systems.
  * - We really should be using GNU autoconf.
+ * - Command line argument handling could be improved.  Currently,
+ *   long options are always processed before short options, which
+ *   means that debugging will always be disabled when long options
+ *   are processed.
  */
 
 #include <stdarg.h>
@@ -111,7 +181,12 @@
 #include <netinet/in.h>
 #include <netdb.h>
 #include <sys/ioctl.h>
-#include <net/if.h>
+#include <fcntl.h>
+
+#ifndef __OpenBSD__
+#include <net/if.h> /* Why doesn't OpenBSD deal with this for us? */
+#endif
+
 #include <arpa/inet.h>
 #include <libnet.h>
 #include <pcap.h>
@@ -124,6 +199,10 @@
 #define AF_LINK AF_INET /* BSD defines some AF_INET network interfaces as AF_LINK */
 #endif
 
+#if defined (__OpenBSD__) || defined(__FreeBSD__) || defined(__bsdi__)
+#define HASSALEN /* Awful, awful hack to make subinterfaces work on BSD. */
+#endif
+
 /* ECN (RFC2481) */
 #ifndef TH_ECN
 #define TH_ECN  0x40
@@ -132,15 +211,8 @@
 #define TH_CWR  0x80
 #endif
 
-#define VERSION "tcptraceroute 1.2 (2001-07-31)"
-#define BANNER  "Copyright (c) 2001, Michael C. Toren <mct@toren.net>\n\
-Updates are available from http://michael.toren.net/code/tcptraceroute/\n"
-
 /* Buffer size used for a few strings, including the pcap filter */
 #define TEXTSIZE	1024
-
-/* Should we attempt to resolve RFC1918 address space? */
-#undef RESOLVE_1918
 
 /*
  * How many bytes should we examine on every packet that comes off the
@@ -153,6 +225,73 @@ Updates are available from http://michael.toren.net/code/tcptraceroute/\n"
 #define SNAPLEN	 (LIBNET_IP_H * 2 + \
 	(LIBNET_TCP_H > LIBNET_ICMP_H ? LIBNET_TCP_H : LIBNET_ICMP_H) + 32)
 
+/*
+ * To add support for additional link layers, add entries to the following
+ * table.  The numbers I have in here now I believe are correct, and were
+ * obtained by looking through other pcap programs, however I have only
+ * tested tcptraceroute on ethernet, and PPP, and loopback interfaces.
+ */
+
+struct datalinktype {
+	int type, offset;
+	char *name;
+} datalinktypes[] = {
+
+#ifdef DLT_EN10MB
+	{	DLT_EN10MB,			14,		"ETHERNET"		},
+#endif
+#ifdef DLT_PPP
+	{	DLT_PPP,			4,		"PPP"			},
+#endif
+#ifdef DLT_SLIP
+	{	DLT_SLIP,			16,		"SLIP"			},
+#endif
+#ifdef DLT_PPP_BSDOS
+	{	DLT_PPP_BSDOS,		24,		"PPP_BSDOS"		},
+#endif
+#ifdef DLT_SLIP_BSDOS
+	{	DLT_SLIP_BSDOS,		24,		"SLIP_BSDOS"	},
+#endif
+#ifdef DLT_FDDI
+	{	DLT_FDDI,			21,		"FDDI"			},
+#endif
+#ifdef DLT_IEEE802
+	{	DLT_IEEE802,		22,		"IEEE802"		},
+#endif
+#ifdef DLT_NULL
+	{	DLT_NULL,			4,		"DLT_NULL"		},
+#endif
+#ifdef DLT_LOOP
+	{	DLT_LOOP,			4,		"DLT_LOOP"		},
+#endif
+
+	/* Does anyone know correct values for these? */
+#ifdef DLT_RAW
+	{	DLT_RAW,			-1,		"RAW"			},
+#endif
+#ifdef DLT_ATM_RFC1483
+	{	DLT_ATM_RFC1483,	-1,		"ATM_RFC1483"	},
+#endif
+#ifdef DLT_EN3MB
+	{	DLT_EN3MB,			-1,		"EN3MB"			},
+#endif
+#ifdef DLT_AX25
+	{	DLT_AX25,			-1,		"AX25"			},
+#endif
+#ifdef DLT_PRONET
+	{	DLT_PRONET,			-1,		"PRONET"		},
+#endif
+#ifdef DLT_CHAOS
+	{	DLT_CHAOS,			-1,		"CHAOS"			},
+#endif
+#ifdef DLT_ARCNET
+	{	DLT_ARCNET,			-1,		"ARCNET"		},
+#endif
+
+	/* End of the road */
+	{	-1,					-1,		NULL			}
+};
+
 /* Various globals */
 u_long dst_ip, src_ip;
 u_short src_prt, dst_prt;
@@ -160,11 +299,33 @@ char *device, *name, *dst, *src;
 char dst_name[TEXTSIZE], dst_prt_name[TEXTSIZE], filter[TEXTSIZE];
 char errbuf[PCAP_ERRBUF_SIZE];
 pcap_t *pcap;
-struct timeval t1, t2;
+int pcap_fd;
+struct timeval now;
 int	sockfd, datalink, offset;
 int o_minttl, o_maxttl, o_timeout, o_debug, o_numeric, o_pktlen,
-	o_nqueries, o_dontfrag, o_tos, o_forceport, o_ecn;
+	o_nqueries, o_dontfrag, o_tos, o_forceport, o_syn, o_ack, o_ecn,
+	o_nofilter, o_nogetinterfaces, o_noselect, o_trackport;
 
+/* interface linked list, built later by getinterfaces() */
+struct interface_entry {
+	char *name;
+	u_long addr;
+	struct interface_entry *next;
+} *interfaces;
+
+/* probe() returns this structure, which describes the packet sent */
+typedef struct {
+	int ttl, q;
+	u_short id, src_prt;
+	struct timeval timestamp;
+	double delta;
+	u_long addr;
+	char *state;
+	char *string;
+} proberecord;
+
+extern char *optarg;
+extern int optind, opterr, optopt;
 extern char pcap_version[];
 extern int errno;
 
@@ -217,16 +378,15 @@ void pfatal(char *err)
 void usage(void)
 {
 	printf("\n%s\n%s\n", VERSION, BANNER);
-    fatal("Usage: %s [-nFE] [-i <interface>] [-f <first ttl>]
+    fatal("Usage: %s [-nNFSAE] [-i <interface>] [-f <first ttl>]
        [-l <packet length>] [-q <number of queries>] [-t <tos>]
-       [-m <max ttl>] [-[pP] <source port>] [-s <source address>]
+       [-m <max ttl>] [-pP] <source port>] [-s <source address>]
        [-w <wait time>] <host> [destination port] [packet length]\n\n", name);
 }
 
 void about(void)
 {
 	printf("\n%s\n%s\n", VERSION, BANNER);
-	debug("Compiled with libpcap version %s\n\n",pcap_version);
 	exit(0);
 }
 
@@ -239,27 +399,39 @@ void *xrealloc(void *oldp, int size)
 	void *p;
 
 	if (!oldp)
-	{
 		/* Kludge for SunOS, which doesn't allow realloc on a NULL pointer */
-		oldp = malloc(1);
-		if (!oldp)
-			fatal("Out of memory!  Could not allocate 1 byte!\n");
-	}
-
-	if (! (p = realloc(oldp, size)))
-		fatal("Out of memory!  Could not reallocate %d bytes!X\n", size);
-
+		p = malloc(size);
+	else
+		p = realloc(oldp, size);
+	
+	if (!p)
+		fatal("Out of memory!  Could not reallocate %d bytes!\n", size);
+	
+	memset(p, 0, size);
 	return p;
 }
 
 /*
- * Same as strncpy, but always be sure the result is terminated.
+ * Same as strncpy and snprintf, but always be sure the result is terminated.
  */
 
 char *safe_strncpy(char *dst, const char *src, int size)
 {
 	dst[size-1] = '\0';
 	return strncpy(dst, src, size-1);
+}
+
+int safe_snprintf(char *s, int size, char *fmt, ...)
+{
+	va_list ap;
+	int ret;
+
+	va_start(ap, fmt);
+	ret = vsnprintf(s, size, fmt, ap);
+	s[size-1] = '\0';
+	va_end(ap);
+
+	return ret;
 }
 
 /*
@@ -272,20 +444,58 @@ char *sprintable(char *s)
 	static char buf[TEXTSIZE];
 	int i;
 
-	for (i = 0; s[i]; i++)
-	{
-		if (i == TEXTSIZE)
-			break;
-
-		buf[i] = isprint(s[i]) ? s[i] : '?';
-	}
-
-	buf[i] = '\0';
-
-	if (i == 0)
+	if (s && s[0])
+		safe_strncpy(buf, s, TEXTSIZE);
+	else
 		safe_strncpy(buf, "(empty)", TEXTSIZE);
 
+	for (i = 0; buf[i]; i++)
+		if (! isprint((u_char) buf[i]))
+			buf[i] = '?';
+
 	return buf;
+}
+
+/*
+ * isdigit() across an entire string.
+ */
+
+int isnumeric(char *s)
+{
+	int i;
+
+	if (!s || !s[0])
+		return 0;
+
+	for (i = 0; s[i]; i++)
+		if (! isdigit((u_char) s[i]))
+			return 0;
+	
+	return 1;
+}
+
+int datalinkoffset(int type)
+{
+	int i;
+
+	for (i = 0; datalinktypes[i].name; i++)
+		if (datalinktypes[i].type == type)
+			return datalinktypes[i].offset;
+
+	return -1;
+}
+
+char *datalinkname(int type)
+{
+	static char name[TEXTSIZE];
+	int i;
+
+	for (i = 0; datalinktypes[i].name; i++)
+		if (datalinktypes[i].type == type)
+			return datalinktypes[i].name;
+
+	safe_snprintf(name, TEXTSIZE, "#%d", type);
+	return name;
 }
 
 /*
@@ -313,7 +523,6 @@ struct timeval tvdiff(struct timeval *tv1, struct timeval *tv2)
 
 	return tvdiff;
 }
-
 
 /*
  * Is the timeval less than, equal to, or greater than zero?
@@ -349,32 +558,200 @@ char *iptos(u_long in)
 
 	p = (u_char *)&in;
 	which = (which + 1 == IPTOSBUFFERS ? 0 : which + 1);
-	sprintf(output[which], "%d.%d.%d.%d", p[0], p[1], p[2], p[3]);
+	safe_snprintf(output[which], 3*4+3+1, "%d.%d.%d.%d", p[0], p[1], p[2], p[3]);
 	return output[which];
 }
 
 /*
- * A wrapper for libnet_host_lookup() with the option not to resolve
- * 1918 space.  This #define should be moved to a command line argument
- * at some point.
+ * A wrapper for libnet_host_lookup(), with the option not to resolve
+ * RFC1918 space.
  */
 
 char *iptohost(u_long in)
 {
 	u_char *p = (u_char *)&in;
 
-#ifndef RESOLVE_1918
-	/* Don't attempt to resolve RFC1918 space */
-	if ((p[0] == 10) ||
+	if ((o_numeric > -1) &&
+		((p[0] == 10) ||
 		(p[0] == 192 && p[1] == 168) ||
-		(p[0] == 172 && p[1] >= 16 && p[1] <= 31))
+		(p[0] == 172 && p[1] >= 16 && p[1] <= 31)))
 	{
 		debug("Not attempting to resolve RFC1918 address %s\n", iptos(in));
 		return iptos(in);
 	}
+
+	return libnet_host_lookup(in, o_numeric > 0 ? 0 : 1);
+}
+
+/*
+ * Allocates memory for a new proberecord structure.
+ */
+
+proberecord *newproberecord(void)
+{
+	proberecord *record;
+
+	record = xrealloc(NULL, sizeof(proberecord));
+	record->state = xrealloc(NULL, TEXTSIZE);
+	record->string = xrealloc(NULL, TEXTSIZE);
+	return record;
+}
+
+/*
+ * Destroys a proberecord structure, carefully, as not to leak memory.
+ */
+
+void freeproberecord(proberecord *record)
+{
+	if (record->string)
+		free(record->string);
+
+	if (record->state)
+		free(record->state);
+
+	free(record);
+}
+
+/*
+ * Fetches the interface list, storing it in struct interface_entry interfaces.
+ */
+
+void getinterfaces(void)
+{
+	struct interface_entry *p;
+	struct ifconf ifc;
+	struct ifreq *ifrp, ifr;
+	int numreqs, i, s;
+	u_long addr;
+	int salen;
+	char *x;
+
+	debug("entering getinterfaces()\n");
+
+	if (o_nogetinterfaces)
+	{
+		debug("Not fetching the interface list\n");
+		return;
+	}
+
+	if (interfaces)
+		fatal("Double call to getinterfaces()\n");
+
+	ifc.ifc_buf = NULL;
+	p = NULL;
+
+	numreqs = 32;
+
+	if ((s = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
+		fatal("socket error");
+
+	debug("ifreq buffer set to %d\n", numreqs);
+
+	for (;;)
+	{
+		ifc.ifc_len = sizeof(struct ifreq) * numreqs;
+		ifc.ifc_buf = xrealloc(ifc.ifc_buf, ifc.ifc_len);
+
+		if (ioctl(s, SIOCGIFCONF, &ifc) < 0)
+			pfatal("ioctl");
+
+		/* This "+ sizeof(struct ifreq) + 64" crap seems to be an (Open?)BSDism. */
+		if ( (ifc.ifc_len + sizeof(struct ifreq) + 64) >= (sizeof(struct ifreq) * numreqs) )
+		{
+			/* Assume it overflowed and try again */
+			numreqs += 32;
+			if (numreqs > 20000)
+				break; /* Too big! */
+			debug("ifreq buffer grown to %d\n", numreqs);
+			continue;
+		}
+
+		break;
+	}
+
+	debug("Successfully retrieved interface list\n");
+
+#ifdef HASSALEN
+	debug("Using HASALEN method for finding addresses.\n");
 #endif
 
-	return libnet_host_lookup(in, ~o_numeric & 1);
+	for (x = ifc.ifc_buf; x < (ifc.ifc_buf + ifc.ifc_len); x += salen)
+	{
+		ifrp = (struct ifreq *)x;
+
+		memset(&ifr, 0, sizeof(struct ifreq));
+		strcpy(ifr.ifr_name, ifrp->ifr_name);
+
+#ifdef HASSALEN
+
+		salen = sizeof(ifrp->ifr_name) + ifrp->ifr_addr.sa_len;
+		if (salen < sizeof(*ifrp))
+			salen = sizeof(*ifrp);
+
+		addr = ((struct sockaddr_in *)&ifrp->ifr_addr)->sin_addr.s_addr;
+		if (ioctl(s, SIOCGIFFLAGS, &ifr) < 0)
+			pfatal("ioctl(SIOCGIFFLAGS)");
+
+#else  /* HASALEN */
+
+		salen = sizeof(*ifrp);
+
+		if (ioctl(s, SIOCGIFADDR, &ifr) < 0)
+			pfatal("ioctl(SIOCGIFADDR)");
+		addr = ((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr.s_addr;
+
+#endif /* HASSALEN else */
+
+#ifdef AF_INET6
+		if (ifrp->ifr_addr.sa_family == AF_INET6)
+		{
+			debug("Ignoring AF_INET6 address on interface %s\n",
+				sprintable(ifr.ifr_name));
+			continue;
+		}
+#endif
+
+		if (ifrp->ifr_addr.sa_family != AF_INET &&
+			ifrp->ifr_addr.sa_family != AF_LINK)
+		{
+			debug("Ignoring non-AF_INET address on interface %s\n",
+				sprintable(ifr.ifr_name));
+			continue;
+		}
+
+		if (ioctl(s, SIOCGIFFLAGS, &ifr) < 0)
+			pfatal("ioctl(SIOCGIFFLAGS)");
+		if ((ifr.ifr_flags & IFF_UP) == 0)
+		{
+			debug("Ignoring down interface %s\n",
+				sprintable(ifr.ifr_name));
+			continue;
+		}
+
+		/* Deal with virtual hosts */
+		for (i = 0; ifr.ifr_name[i]; i++)
+			if (ifr.ifr_name[i] == ':')
+				ifr.ifr_name[i] = '\0';
+
+		/* Grow another node on the linked list... */
+		if (!p)
+			p = interfaces = xrealloc(NULL, sizeof(struct interface_entry));
+		else
+			p = p->next = xrealloc(NULL, sizeof(struct interface_entry));
+
+		p->next = NULL;
+
+		/* ... and fill it in */
+		p->addr = addr;
+		p->name = xrealloc(NULL, strlen(ifr.ifr_name) + 1);
+		strcpy(p->name, ifr.ifr_name);
+
+		debug("Discovered interface %s with address %s\n",
+			sprintable(p->name), iptos(p->addr));
+	}
+
+	free(ifc.ifc_buf);
+	debug("leaving getinterfaces()\n");
 }
 
 /*
@@ -411,152 +788,96 @@ u_long findsrc(u_long dest)
 }
 
 /*
- * Locates the device name matching the given source address.  For
- * virtual hosts under Linux and Solaris, returns the portions of the
- * name before the first ":" character.  Unfortunately, this won't
- * match virtual hosts under OpenBSD.
+ * Find an appropriate device to use given the specified source address.
+ * However, if we find an interface matching the global dst_ip address, set
+ * the source address we're looking for to 127.0.0.1 in an attempt to select
+ * the loopback.  Ofcourse, this entirely depends on the fact that a loopback
+ * interface exists with an address of 127.0.0.1.
  */
 
-char *finddev(u_long src)
+char *finddev(u_long with_src)
 {
-	struct ifconf ifc;
-	struct ifreq *ifrp, ifr;
-	int numreqs, n, i, s;
-	char *device;
+	struct interface_entry *p;
+	char *device = NULL;
 
-	device = NULL;
-	ifc.ifc_buf = NULL;
+	debug("entering finddev()\n");
 
-	/*
-	 * The initial request length needs to be somewhat large, because
-	 * the incrementing technique doesn't work on BSD(?)  But, it can't
-	 * be too large, or ioct() will complain (on Linux at least) about
-	 * not being able to allocate enough memory for the request.
-	 */
-
-	numreqs = 1024;
-
-	if ((s = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
-		fatal("socket error");
-
-	debug("ifreq buffer set to %d\n", numreqs);
-
-	for (;;)
-	{
-		ifc.ifc_len = sizeof(struct ifreq) * numreqs;
-		ifc.ifc_buf = xrealloc(ifc.ifc_buf, ifc.ifc_len);
-
-		if (ioctl(s, SIOCGIFCONF, &ifc) < 0)
-			pfatal("ioctl");
-
-        if (ifc.ifc_len >= sizeof(struct ifreq) * numreqs)
+	/* First, see if we're trying to trace to ourself */
+	for (p = interfaces; p; p = p->next)
+		if (p->addr == dst_ip)
 		{
-			/* Assume it overflowed and try again */
-			numreqs += 1024;
-			debug("ifreq buffer grown to %d\n", numreqs);
-			continue;
+			debug("Destination matches local address of interface %s;\n\tattempting to find loopback interface, o_nofilter set\n", p->name);
+			with_src = libnet_name_resolve("127.0.0.1", 0);
+			o_nofilter = 1;
 		}
 
-		break;
-	}
-
-	debug("successfully retrieved interface list\n");
-
-	for (n = 0, ifrp = ifc.ifc_req;
-		n < ifc.ifc_len;
-		n += sizeof(struct ifreq), ifrp++)
-	{
-		u_long addr;
-
-		memset(&ifr, 0, sizeof(struct ifreq));
-		strcpy(ifr.ifr_name, ifrp->ifr_name);
-
-		if (ifrp->ifr_addr.sa_family != AF_INET &&
-			ifrp->ifr_addr.sa_family != AF_LINK)
-		{
-			debug("ignoring non-AF_INET interface %s\n", sprintable(ifr.ifr_name));
-			continue;
-		}
-
-		if (ioctl(s, SIOCGIFFLAGS, &ifr) < 0)
-			pfatal("ioctl(SIOCGIFFLAGS)");
-
-		if ((ifr.ifr_flags & IFF_UP) == 0)
-		{
-			debug("Ignoring down interface %s\n", sprintable(ifr.ifr_name));
-			continue;
-		}
-
-		if (ioctl(s, SIOCGIFADDR, &ifr) < 0)
-			pfatal("ioctl(SIOCGIFADDR)");
-
-		addr = ((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr.s_addr;
-
-		debug("Discovered interface %s with address %s\n",
-			sprintable(ifr.ifr_name), iptos(addr));
-
-		if (addr == src)
-		{
-			debug("Interface %s matches source address %s\n",
-				sprintable(ifr.ifr_name), iptos(src));
-			device = xrealloc(NULL, sizeof(ifr.ifr_name+1));
-			strcpy(device, ifr.ifr_name);
-
-			/* Deal with virtual hosts */
-			for (i = 0; device[i]; i++)
-				if (device[i] == ':')
-					device[i] = '\0';
-		}
-	}
-
-	free(ifc.ifc_buf);
+	for (p = interfaces; p; p = p->next)
+		if (p->addr == with_src)
+			device = p->name;
+	
+	debug("finddev() returning %s\n", device);
 	return device;
 }
 
+
 /*
- * To add support for additional link layers, add entries to datalinkoffset()
- * and datalinkname().  The numbers I have in here now I believe are correct,
- * and were obtained by looking through other pcap programs, however I have
- * only tested tcptraceroute on ethernet and Linux PPP interfaces.
+ * Request a local unused TCP port from the kernel using bind(2)
  */
 
-int datalinkoffset(int type)
+u_short allocateport(u_short requested)
 {
-	switch (type)
-	{
-		case DLT_EN10MB:		return 14;
-		case DLT_PPP:			return 4;
-		case DLT_PPP_BSDOS:		return 24;
-		case DLT_SLIP:			return 16;
-		case DLT_SLIP_BSDOS:	return 24;
-		case DLT_FDDI:			return 21;
-		case DLT_IEEE802:		return 22;
-		case DLT_RAW:			return 0;
-		default:				return -1;
-	}
+	struct sockaddr_in in;
+	int	s, insize;
+
+	if ((s = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
+		pfatal("socket error");
+
+	insize = sizeof(in);
+	memset(&in, 0, insize);
+
+	in.sin_family = AF_INET;
+	in.sin_port = htons(requested);
+
+	if ((bind(s, (struct sockaddr *)&in, insize)) < 0)
+		return 0;
+
+	if ((getsockname(s, (struct sockaddr *)&in, &insize)) < 0)
+		pfatal("getsockname");
+
+	close(s);
+	return ntohs(in.sin_port);
 }
 
-char *datalinkname(int type)
+/*
+ * Allocate an IP ID from our pool of unallocated ID's.  A cache is kept of
+ * the last ALLOCATEID_CACHE_SIZE allocations, so we can check for duplicates.
+ */
+
+#ifndef ALLOCATEID_CACHE_SIZE
+#define ALLOCATEID_CACHE_SIZE 512
+#endif
+
+u_short allocateid(void)
 {
-	static char name[TEXTSIZE];
+	static u_short ids[ALLOCATEID_CACHE_SIZE];
+	static int n;
+	int i, j;
 
-	switch (type)
+	if ((n = n % ALLOCATEID_CACHE_SIZE) == 0)
 	{
-		case DLT_EN10MB:		return "ETHERNET";
-		case DLT_SLIP:			return "SLIP";
-		case DLT_SLIP_BSDOS:	return "SLIP_BSDOS";
-		case DLT_PPP:			return "PPP";
-		case DLT_PPP_BSDOS:		return "PPP_BSDOS";
-		case DLT_FDDI:			return "FDDI";
-		case DLT_IEEE802:		return "IEEE802";
-		case DLT_ATM_RFC1483:	return "ATM";
-		case DLT_RAW:			return "RAW";
+		debug("Generating a new batch of %d IP ID's\n", ALLOCATEID_CACHE_SIZE);
 
-		default:
-			snprintf(name, TEXTSIZE, "#%d", type);
-			return name;
+		for(i = 0; i < ALLOCATEID_CACHE_SIZE; i++)
+		{
+			for(ids[i] = libnet_get_prand(PRu16), j = i + 1; j < ALLOCATEID_CACHE_SIZE + i; j++)
+				if (ids[i] == ids[j % ALLOCATEID_CACHE_SIZE])
+					ids[i] = libnet_get_prand(PRu16), j = i + 1;
+		}
 	}
+
+	return ids[n++];
 }
+
 
 /* 
  * What a kludge, but it works.  The aim is to be as compatible as possible
@@ -566,7 +887,7 @@ char *datalinkname(int type)
  * tracing through links which have per-packet, round-robin load balancing.
  */
 
-void showprobe(int ttl, int q, u_long addr, char *state, char *fmt, ...)
+void showprobe(proberecord *record)
 {
 	/* Variables to keep state between calls */
 	static char laststate[TEXTSIZE];
@@ -575,64 +896,142 @@ void showprobe(int ttl, int q, u_long addr, char *state, char *fmt, ...)
 	static int everprint;
 
 	int printflag = 0;
-	va_list ap;
+
+	/* kludge to make debug mode usable */
+	if (o_debug)
+	{
+		fflush(stdout);
+		fprintf(stderr, "debug: displayed hop\n");
+		fflush(stderr);
+	}
 
 	/* ttl */
-	if (lastttl != ttl)
+	if (lastttl != record->ttl)
 	{
-		printf("%2d  ", ttl);
+		printf("%2d  ", record->ttl);
 		printflag = 1;
 		everprint = 0;
 		safe_strncpy(laststate, "", TEXTSIZE);
 	}
-	else if (lastaddr != addr && addr != INADDR_ANY && lastaddr != INADDR_ANY)
+	else if (lastaddr != record->addr && record->addr != INADDR_ANY && lastaddr != INADDR_ANY)
 	{
 		printf("\n    ");
 		printflag = 1;
 	}
 
 	/* host */
-	if ((printflag || !everprint) && addr != INADDR_ANY)
+	if ((printflag || !everprint) && record->addr != INADDR_ANY)
 	{
-		if (q > 1 && lastaddr == INADDR_ANY)
+		if (record->q > 1 && lastaddr == INADDR_ANY)
 			printf(" ");
 
-		printf("%s (%s)", iptohost(addr), iptos(addr));
+		printf("%s (%s)", iptohost(record->addr), iptos(record->addr));
 		everprint = 1;
 	}
 
 	/* tcp state */
-	if ( ((ttl != lastttl) && state) ||
-		((ttl == lastttl) && state && (strncmp(laststate, state, TEXTSIZE) != 0)))
+	if ( ((record->ttl != lastttl) && *(record->state)) ||
+		((record->ttl == lastttl) && *(record->state) && (strncmp(laststate, record->state, TEXTSIZE) != 0)))
 	{
-		printf(" [%s]", state);
+		printf(" [%s]", record->state);
 	}
 
 	/* space before ms */
-	if (! (addr == INADDR_ANY && q == 1))
+	if (! (record->addr == INADDR_ANY && record->q == 1))
 	{
 		/* if timeout, only print one space. otherwise, two */
-		if ((addr == INADDR_ANY) || (lastaddr == INADDR_ANY))
+		if ((record->addr == INADDR_ANY) || (lastaddr == INADDR_ANY))
 			printf(" ");
 		else
 			printf("  ");
 	}
 
-	va_start(ap, fmt);
-	vprintf(fmt, ap);
-	va_end(ap);
+	if (record->addr == INADDR_ANY)
+		safe_strncpy(record->string, "*", TEXTSIZE);
+	
+	if (! record->string)
+		fatal("something bad happened\n");
 
-	if (q == o_nqueries)
+	printf(record->string, record->delta);
+
+	if (record->q == o_nqueries)
 		printf("\n");
 
-	lastttl = ttl;
-	lastaddr = addr;
-	if (state)
-		safe_strncpy(laststate, state, TEXTSIZE);
+	lastttl = record->ttl;
+	lastaddr = record->addr;
+	if (*(record->state))
+		safe_strncpy(laststate, record->state, TEXTSIZE);
+
+	/* kludge to make debug mode usable */
+	if (o_debug)
+		fprintf(stdout, "\n");
+	if (o_debug && record->q != o_nqueries)
+		fprintf(stdout, "\n");
 
 	fflush(stdout);
 }
 
+/*
+ * Useful for debugging; dump #define's and command line options.
+ */
+
+void debugoptions(void)
+{
+	if (! o_debug)
+		return;
+
+	debug("debugoptions():\n");
+
+	/*
+	 * TEXTSIZE SNAPLEN IPTOSBUFFERS ALLOCATEID_CACHE_SIZE device datalink
+	 * datalinkname(datalink) datalinkoffset(datalink) o_minttl o_maxttl
+	 * o_timeout o_debug o_numeric o_pktlen o_nqueries o_dontfrag o_tos
+	 * o_forceport o_syn o_ack o_ecn o_nofilter o_nogetinterfaces o_trackport
+	 */
+
+	debug("%16s: %-2d %14s: %-2d %16s: %-2d\n",
+		"TEXTSIZE", TEXTSIZE,
+		"SNAPLEN", SNAPLEN,
+		"IPTOSBUFFERS", IPTOSBUFFERS);
+
+	debug("%16s: %-2d %16s: %-2d %16s: %-2d\n",
+		"ALLOCATEID_CACHE", ALLOCATEID_CACHE_SIZE,
+		"datalink", datalink,
+		"datalinkoffset", datalinkoffset(datalink));
+
+	debug("%16s: %-2d %16s: %-2d %16s: %-2d\n",
+		"o_minttl", o_minttl,
+		"o_maxttl", o_maxttl,
+		"o_timeout", o_timeout);
+
+	debug("%16s: %-2d %16s: %-2d %16s: %-2d\n",
+		"o_debug", o_debug,
+		"o_numeric", o_numeric,
+		"o_pktlen", o_pktlen);
+
+	debug("%16s: %-2d %16s: %-2d %16s: %-2d\n",
+		"o_nqueries", o_nqueries,
+		"o_dontfrag", o_dontfrag,
+		"o_tos", o_tos);
+
+	debug("%16s: %-2d %16s: %-2d %16s: %-2d\n",
+		"o_forceport", o_forceport,
+		"o_syn", o_syn,
+		"o_ack", o_ack);
+
+	debug("%16s: %-2d %16s: %d %16s: %-2d\n",
+		"o_ecn", o_ecn,
+		"o_nofilter", o_nofilter,
+		"o_nogetinterfaces", o_nogetinterfaces);
+
+	debug("%16s: %-2d %16s: %-12s %s: %s\n",
+		"o_trackport", o_trackport,
+		"datalinkname", datalinkname(datalink),
+		"device", device);
+
+	debug("%16s: %-2d\n",
+		"o_noselect", o_noselect);
+}
 
 /*
  * Check command line arguments for sanity, and fill in the blanks.
@@ -640,10 +1039,10 @@ void showprobe(int ttl, int q, u_long addr, char *state, char *fmt, ...)
 
 void defaults(void)
 {
-	struct sockaddr_in in;
 	struct servent *serv;
-	int insize;
 	u_long recommended_src;
+
+	getinterfaces();
 
 	if ((dst_ip = libnet_name_resolve(dst, 1)) == 0xFFFFFFFF)
 		fatal("Bad destination address: %s\n", dst);
@@ -656,7 +1055,9 @@ void defaults(void)
 			fatal("Bad source address: %s\n", src);
 	}
 	else
+	{
 		src_ip = recommended_src;
+	}
 
 	if (device == NULL)
 		/* not specified on command line */
@@ -664,7 +1065,7 @@ void defaults(void)
 
 	if (device == NULL)
 	{
-		/* couldn't find an interface matching recommended_src */
+		/* couldn't find an appropriate interface */
 		warn("Could not determine appropriate device; resorting to pcap_lookupdev()\n");
 		device = pcap_lookupdev(errbuf);
 	}
@@ -684,25 +1085,23 @@ void defaults(void)
 
 	pcap_close(pcap);
 
-	if (! o_forceport)
+	if (src_prt && o_trackport)
 	{
-		if ((sockfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
-			pfatal("socket error");
+		warn("--track-id implied by specifying the local source port\n");
+		o_trackport = 0;
+	}
 
-		insize = sizeof(in);
-		memset(&in, 0, insize);
+	if (! o_trackport)
+	{
+#if defined (__SVR4) && defined (__sun)
+		warn("--track-id is unlikely to work on Solaris\n");
+#endif
 
-		in.sin_family = AF_INET;
-		in.sin_port = htons(src_prt);
+		if (! o_forceport)
+			src_prt = allocateport(src_prt);
 
-		if ((bind(sockfd, (struct sockaddr *)&in, insize)) < 0)
-			fatal("Sorry, could not bind to port %d.  Use -P instead of -p to override.\n", src_prt);
-
-		if ((getsockname(sockfd, (struct sockaddr *)&in, &insize)) < 0)
-			pfatal("getsockname");
-
-		src_prt = ntohs(in.sin_port);
-		close(sockfd);
+		if (src_prt == 0)
+			fatal("Sorry, requested local port is already in use.  Use -P, instead of -p, to override.\n");
 	}
 
 	if (o_minttl <= 0 || o_maxttl <= 0)
@@ -714,6 +1113,9 @@ void defaults(void)
 	if (o_minttl > o_maxttl)
 		fatal("Minimum TTL (%d) must be less than maximum TTL (%d)\n",
 			o_minttl, o_maxttl);
+
+	if (o_nqueries <= 0)
+		fatal("Number of queries must be at least 1\n");
 
 	if (o_timeout <= 0)
 		fatal("Timeout must be at least 1\n");
@@ -733,17 +1135,26 @@ void defaults(void)
 		pfatal("socket allocation");
 
 	if (strcmp(dst, iptos(dst_ip)) == 0)
-		snprintf(dst_name, TEXTSIZE, "%s", dst);
+		safe_snprintf(dst_name, TEXTSIZE, "%s", dst);
 	else
-		snprintf(dst_name, TEXTSIZE, "%s (%s)", dst, iptos(dst_ip));
+		safe_snprintf(dst_name, TEXTSIZE, "%s (%s)", dst, iptos(dst_ip));
 
 	if ((serv = getservbyport(dst_prt, "tcp")) == NULL)
-		snprintf(dst_prt_name, TEXTSIZE, "%d", dst_prt);
+		safe_snprintf(dst_prt_name, TEXTSIZE, "%d", dst_prt);
 	else
-		snprintf(dst_prt_name, TEXTSIZE, "%d (%s)", dst_prt, serv->s_name);
+		safe_snprintf(dst_prt_name, TEXTSIZE, "%d (%s)", dst_prt, serv->s_name);
 
-	fprintf(stderr, "Selected device %s, address %s, port %d for outgoing packets\n",
-		device, iptos(src_ip), src_prt);
+	if (! (o_syn|o_ack))
+	{
+		debug("Setting o_syn, in absence of either o_syn or o_ack\n");
+		o_syn = 1;
+	}
+
+	debugoptions();
+
+	fprintf(stderr, "Selected device %s, address %s", device, iptos(src_ip));
+	if (! o_trackport) fprintf(stderr, ", port %d", src_prt);
+	fprintf(stderr, " for outgoing packets\n");
 }
 
 /*
@@ -758,11 +1169,15 @@ void initcapture(void)
 	if (! (pcap = pcap_open_live(device, offset + SNAPLEN, 0, 10, errbuf)))
 		fatal("pcap_open_live failed: %s", errbuf);
 
-	snprintf(filter, TEXTSIZE,
-		"(tcp and src host %s and src port %d and dst host %s and dst port %d)
+	safe_snprintf(filter, TEXTSIZE, "
+		(tcp and src host %s and src port %d and dst host %s)
 		or ((icmp[0] == 11 or icmp[0] == 3) and dst host %s)",
-			iptos(dst_ip), dst_prt, iptos(src_ip), src_prt, iptos(src_ip));
-	debug("pcap filter is:\n'%s'\n",filter);
+			iptos(dst_ip), dst_prt, iptos(src_ip), iptos(src_ip));
+
+	if (o_nofilter)
+		filter[0] = '\0';
+
+	debug("pcap filter is: %s\n", o_nofilter ? "(nothing)" : filter);
 
 	localnet = 0;
 	netmask = 0;
@@ -775,43 +1190,75 @@ void initcapture(void)
 
 	if (pcap_setfilter(pcap, &fcode) < 0)
 		fatal("pcap_setfilter failed\n");
+
+	pcap_fd = pcap_fileno(pcap);
+	if (fcntl(pcap_fd, F_SETFL, O_NONBLOCK) < 0)
+		pfatal("fcntl(F_SETFL, O_NONBLOCK) failed");
 }
 
 /*
- * Sends out a TCP SYN packet with the specified TTL, and returns
- * the IP ID that was sent so we know which one to listen for later.
+ * Sends out a TCP SYN packet with the specified TTL, and returns a
+ * proberecord structure describing the packet sent, so we know what
+ * to listen for later.  A new IP ID is generated for each probe, and
+ * a new source port if o_trackport is specified.
  */
 
-u_short probe(int ttl)
+void probe(proberecord *record, int ttl, int q)
 {
 	static u_char *payload, *buf;
-	u_short id;
 	int i, size, ret;
 
+	/* Initialize the packet buffer */
+	size = LIBNET_IP_H + LIBNET_TCP_H + o_pktlen;
+
+	if (!buf)
+	{
+		debug("Initializing packet buffer of %d bytes\n", size);
+		buf = xrealloc(buf, size);
+	}
+
+	memset(buf, 0, size);
+
+	/* Initialize the packet payload */
 	if (o_pktlen && !payload)
 	{
 		debug("Initializing payload of %d bytes\n", o_pktlen);
 		payload = xrealloc(payload, o_pktlen);
 
 		for(i = 0; i < o_pktlen; i++)
-			payload[i] = '!' + (i % ('~' - '!'));
+			payload[i] = i % ('~' - '!') + '!';
+
+			/*
+			 * TODO: Should the byte pattern we use to pad out the
+			 * packet be a command line argument?  Does anyone care?
+			 * Would it just be feature bloat?
+			 */
+
+		debug("Payload: %s\n", sprintable(payload));
 	}
 
-	size = LIBNET_IP_H + LIBNET_TCP_H + o_pktlen;
+	record->q = q;
+	record->ttl = ttl;
+	record->addr = INADDR_ANY;
+	record->src_prt = src_prt;
+	record->id = allocateid();
+	record->delta = 0;
 
-	if (!buf)
+	if (o_trackport)
 	{
-		debug("Initializing probe buffer\n");
-		buf = xrealloc(buf, size);
+		record->src_prt = allocateport(0);
+		if (record->src_prt == 0)
+			pfatal("Could not allocate local port: bind");
 	}
 
-	memset(buf, 0, size);
-	id = libnet_get_prand(PRu32);
+	if (gettimeofday(&(record->timestamp), NULL) < 0)
+		pfatal("gettimeofday");
 
+	/* Build the packet, and send it off into the cold, cruel world ... */
 	libnet_build_ip(
 		LIBNET_TCP_H+o_pktlen,	/* len			*/
 		o_tos,					/* tos			*/
-		id,						/* id			*/
+		record->id,				/* id			*/
 		o_dontfrag ? IP_DF : 0,	/* frag			*/
 		ttl,					/* ttl			*/
 		IPPROTO_TCP,			/* proto		*/
@@ -822,11 +1269,15 @@ u_short probe(int ttl)
 		buf);					/* buffer		*/
 
 	libnet_build_tcp(
-		src_prt,				/* source port	*/
+		record->src_prt,		/* source port	*/
 		dst_prt,				/* dest port	*/
 		0,						/* seq number	*/
 		0,						/* ack number	*/
-		TH_SYN | (o_ecn ? TH_CWR|TH_ECN : 0), /* control		*/ 
+
+		(o_syn ? TH_SYN : 0) |
+		(o_ack ? TH_ACK : 0) |
+		(o_ecn ? TH_CWR|TH_ECN : 0), /* control	*/
+
 		0,						/* window		*/
 		0,						/* urgent?		*/
 		payload,				/* data			*/
@@ -835,31 +1286,39 @@ u_short probe(int ttl)
 
 	libnet_do_checksum(buf, IPPROTO_TCP, LIBNET_TCP_H + o_pktlen);
 
-	if (gettimeofday(&t1, NULL) < 0)
-		pfatal("gettimeofday");
-
 	if ((ret = libnet_write_ip(sockfd, buf, size)) < size)
 		fatal("libnet_write_ip failed?  Attempted to write %d bytes, only wrote %d\n",
 			  size, ret);
-
-	return id;
 }
 
 /*
- * Listens for responses to our probe matching the specified IP ID and print
- * the results.  Returns 1 if the destination was reached, or 0 if we need to
+ * Horrible macro kludge, to be called only from capture(), for architectures
+ * such as sparc that don't allow non-aligned memory access.  The idea is to
+ * malloc new space (which is guaranteed to be properly aligned), copy the
+ * packet we want to parse there, then cast the packet header struct against
+ * the new, aligned space.
+ */
+
+#define ALIGN_PACKET(dest, cast, offset) do { \
+		static u_char *buf; \
+		if (buf == NULL) buf = xrealloc(NULL, SNAPLEN - (offset)); \
+		memcpy(buf, packet + (offset), len - (offset)); \
+		dest = (struct cast *)buf; \
+	} while (0) /* no semi-colon */
+
+/*
+ * Listens for responses to our probe matching the specified proberecord
+ * structure.  Returns 1 if the destination was reached, or 0 if we need to
  * increment the TTL some more.
  */
 
-int capture(int ttl, int q, u_short id)
+int capture(proberecord *record)
 {
 	u_char *packet;
 	struct pcap_pkthdr packet_hdr;
-	struct libnet_ip_hdr *ip_hdr, *old_ip_hdr;
-	struct libnet_tcp_hdr *tcp_hdr, *old_tcp_hdr;
-	struct libnet_icmp_hdr *icmp_hdr;
+	struct libnet_ip_hdr *ip_hdr;
 	struct timeval start, now, timepassed, timeout_tv, timeleft;
-	int pcap_fd, firstpass, ret, len;
+	int firstpass, ret, len;
 	double delta;
 	fd_set sfd;
 
@@ -895,7 +1354,7 @@ int capture(int ttl, int q, u_short id)
 
 			if (tvsign(&timeleft) <= 0)
 			{
-				showprobe(ttl, q, INADDR_ANY, NULL, "*");
+				debug("timeout\n");
 				return 0;
 			}
 		}
@@ -911,11 +1370,12 @@ int capture(int ttl, int q, u_short id)
 		 *   http://www.tcpdump.org/lists/workers/2001/03/msg00110.html
 		 */
 
-		pcap_fd = pcap_fileno(pcap);
 		FD_ZERO(&sfd);
 		FD_SET(pcap_fd, &sfd);
 
-		if ((ret = select(pcap_fd + 1, &sfd, NULL, NULL, &timeleft)) < 0)
+		ret = o_noselect ? 1 : select(pcap_fd + 1, &sfd, NULL, NULL, &timeleft);
+
+		if (ret < 0)
 		{
 			fatal("select");
 		}
@@ -933,44 +1393,67 @@ int capture(int ttl, int q, u_short id)
 
 		packet += offset;
 		len = packet_hdr.caplen - offset;
-		debug("received %d byte packet from pcap_next()\n", len);
+
+		debug("received %d byte IP packet from pcap_next()\n", len);
 
 		if (len < LIBNET_IP_H)
 		{
-			debug("ignoring partial ip packet\n");
+			debug("Ignoring partial IP packet\n");
 			continue;
 		}
 
-		ip_hdr = (struct libnet_ip_hdr *)packet;
+		if (len > SNAPLEN)
+		{
+			debug("Packet received is larger than our snaplen?  Ignoring\n", SNAPLEN);
+			continue;
+		}
 
-		if (gettimeofday(&t2, NULL) < 0)
+		ALIGN_PACKET(ip_hdr, libnet_ip_hdr, 0);
+
+		if (ip_hdr->ip_v != 4)
+		{
+			debug("Ignoring non-IPv4 packet\n");
+			continue;
+		}
+
+		if (ip_hdr->ip_hl > 5)
+		{
+			debug("Ignoring IP packet with IP options\n");
+			continue;
+		}
+
+		if (ip_hdr->ip_dst.s_addr != src_ip)
+		{
+			debug("Ignoring IP packet not addressed to us (%s, not %s)\n",
+				iptos(ip_hdr->ip_dst.s_addr), iptos(src_ip));
+			continue;
+		}
+
+		if (gettimeofday(&now, NULL) < 0)
 			pfatal("gettimeofday");
 
-		delta = (double)(t2.tv_sec - t1.tv_sec) * 1000 +
-			(double)(t2.tv_usec - t1.tv_usec) / 1000;
+		delta = (double)(now.tv_sec - record->timestamp.tv_sec) * 1000 +
+			(double)(now.tv_usec - record->timestamp.tv_usec) / 1000;
 
 		if (ip_hdr->ip_p == IPPROTO_ICMP)
 		{
+			struct libnet_icmp_hdr *icmp_hdr;
+			struct libnet_ip_hdr *old_ip_hdr;
+			struct libnet_tcp_hdr *old_tcp_hdr;
+
 			if (len < LIBNET_IP_H + LIBNET_ICMP_H + 4)
 			{
 				debug("Ignoring partial icmp packet\n");
 				continue;
 			}
 
-			icmp_hdr = (struct libnet_icmp_hdr *)(packet + LIBNET_IP_H);
-			debug("received icmp packet\n");
-
-			if (icmp_hdr->icmp_type != ICMP_TIMXCEED &&
-				icmp_hdr->icmp_type != ICMP_UNREACH)
-			{
-				showprobe(ttl, q, ip_hdr->ip_src.s_addr, NULL,
-					"%.3f ms -- Unexpected ICMP\n", delta);
-				return 0;
-			}
+			ALIGN_PACKET(icmp_hdr, libnet_icmp_hdr, 0 + LIBNET_IP_H);
+			debug("Received icmp packet\n");
 
 			/*
 			 * The IP header that generated the ICMP packet is quoted
-			 * here.  I don't know what the +4 is, but it works.  */
+			 * here.  I don't know what the +4 is, but it works.
+			 */
 
 			if (len < LIBNET_IP_H + LIBNET_ICMP_H + 4 + LIBNET_IP_H + 4)
 			{
@@ -978,29 +1461,56 @@ int capture(int ttl, int q, u_short id)
 				continue;
 			}
 
-			old_ip_hdr = (struct libnet_ip_hdr *)(packet +
-				LIBNET_IP_H + LIBNET_ICMP_H + 4);
+			ALIGN_PACKET(old_ip_hdr, libnet_ip_hdr,
+				0 + LIBNET_IP_H + LIBNET_ICMP_H + 4);
 
 			/* The entire TCP header isn't here, but the port numbers are */
-			old_tcp_hdr = (struct libnet_tcp_hdr *)(packet +
-					LIBNET_IP_H + LIBNET_ICMP_H + 4 + LIBNET_IP_H);
+			ALIGN_PACKET(old_tcp_hdr, libnet_tcp_hdr,
+				0 + LIBNET_IP_H + LIBNET_ICMP_H + 4 + LIBNET_IP_H);
+
+			if (old_ip_hdr->ip_v != 4)
+			{
+				debug("Ignoring ICMP packet which quotes a non-IPv4 packet\n");
+				continue;
+			}
+
+			if (old_ip_hdr->ip_hl > 5)
+			{
+				debug("Ignoring ICMP packet which quotes an IP packet with IP options\n");
+				continue;
+			}
+
+			if (old_ip_hdr->ip_dst.s_addr != dst_ip)
+			{
+				debug("Ignoring ICMP packet with incorrect quoted destination (%s, not %s)\n",
+					iptos(old_ip_hdr->ip_dst.s_addr), iptos(dst_ip));
+				continue;
+			}
+
+			if (old_ip_hdr->ip_src.s_addr != src_ip)
+			{
+				debug("Ignoring ICMP packet with incorrect quoted source (%s, not %s)\n",
+					iptos(old_ip_hdr->ip_src.s_addr), iptos(src_ip));
+				continue;
+			}
 
 			/* These are not the droids you are looking for */
 			if (old_ip_hdr->ip_p != IPPROTO_TCP)
 			{
-				debug("icmp packet doesn't quote a tcp ip header\n");
+				debug("Ignoring ICMP packet which doesn't quote a TCP header\n");
 				continue;
 			}
 
 			/* We are free to go about our business */
-			if (ntohs(old_ip_hdr->ip_id) != id)
+			if (! o_trackport && (ntohs(old_ip_hdr->ip_id) != record->id))
 			{
 				debug("icmp packet doesn't contain the id we sent\n");
 				continue;
 			}
 
 			/* Move along, move along */
-			if (ntohs(old_tcp_hdr->th_sport) != src_prt)
+			if ((ntohs(old_tcp_hdr->th_sport) != record->src_prt)
+				|| (ntohs(old_tcp_hdr->th_dport) != dst_prt))
 			{
 				debug("icmp packet doesn't contain the correct tcp port numbers\n");
 				continue;
@@ -1008,130 +1518,238 @@ int capture(int ttl, int q, u_short id)
 
 			if (icmp_hdr->icmp_type == ICMP_UNREACH)
 			{
-				char *s;
+				char s[TEXTSIZE];
 
 				switch(icmp_hdr->icmp_code)
 				{
 					case ICMP_UNREACH_NET:
-						s = "!N"; break;
+						safe_strncpy(s, "!N", TEXTSIZE); break;
 
 					case ICMP_UNREACH_HOST:
-						s = "!H"; break;
+						safe_strncpy(s, "!H", TEXTSIZE); break;
 
 					case ICMP_UNREACH_PROTOCOL:
-						s = "!P"; break;
+						safe_strncpy(s, "!P", TEXTSIZE); break;
+
+					case ICMP_UNREACH_PORT:
+						safe_strncpy(s, "!p", TEXTSIZE); break;
 
 					case ICMP_UNREACH_NEEDFRAG:
-						s = "!F"; break;
+						safe_strncpy(s, "!F", TEXTSIZE); break;
 
 					case ICMP_UNREACH_SRCFAIL:
-						s = "!S"; break;
+						safe_strncpy(s, "!S", TEXTSIZE); break;
 
 					case ICMP_UNREACH_NET_PROHIB:
 					case ICMP_UNREACH_FILTER_PROHIB:
-						s = "!A"; break;
+						safe_strncpy(s, "!A", TEXTSIZE); break;
 
 					case ICMP_UNREACH_HOST_PROHIB:
-						s = "!C"; break;
+						safe_strncpy(s, "!C", TEXTSIZE); break;
 
 					case ICMP_UNREACH_NET_UNKNOWN:
 					case ICMP_UNREACH_HOST_UNKNOWN:
-						s = "!U"; break;
+						safe_strncpy(s, "!U", TEXTSIZE); break;
 
 					case ICMP_UNREACH_ISOLATED:
-						s = "!I"; break;
+						safe_strncpy(s, "!I", TEXTSIZE); break;
 
 					case ICMP_UNREACH_TOSNET:
 					case ICMP_UNREACH_TOSHOST:
-						s = "!T"; break;
+						safe_strncpy(s, "!T", TEXTSIZE); break;
 
-					case ICMP_UNREACH_PORT:
 					case ICMP_UNREACH_HOST_PRECEDENCE:
 					case ICMP_UNREACH_PRECEDENCE_CUTOFF:
 					default:
-						s = "!?"; break;
+						safe_snprintf(s, TEXTSIZE, "!<%d>", icmp_hdr->icmp_code);
 				}
 
-				showprobe(ttl, q, ip_hdr->ip_src.s_addr, NULL,
-					"%.3f ms %s", delta, s);
+				record->delta = delta;
+				record->addr = ip_hdr->ip_src.s_addr;
+				safe_snprintf(record->string, TEXTSIZE, "%%.3f ms %s", s);
 				return 1;
 			}
 
 			if (icmp_hdr->icmp_type == ICMP_TIMXCEED)
 			{
-				showprobe(ttl, q, ip_hdr->ip_src.s_addr, NULL,
-					"%.3f ms", delta);
+				record->delta = delta;
+				record->addr = ip_hdr->ip_src.s_addr;
+				safe_strncpy(record->string, "%.3f ms", TEXTSIZE);
 				return 0;
 			}
 
-			fatal("something bad happened\n");
+			if (icmp_hdr->icmp_type != ICMP_TIMXCEED &&
+				icmp_hdr->icmp_type != ICMP_UNREACH)
+			{
+				record->delta = delta;
+				record->addr = ip_hdr->ip_src.s_addr;
+				safe_strncpy(record->string, "%.3f ms -- Unexpected ICMP", TEXTSIZE);
+				return 0;
+			}
+
+			fatal("Something bad happened\n");
 		}
 
 		if (ip_hdr->ip_p == IPPROTO_TCP)
 		{
-			char *s;
-			
+			struct libnet_tcp_hdr *tcp_hdr;
+
+			if (ip_hdr->ip_src.s_addr != dst_ip)
+			{
+				debug("tcp packet's origin does not match our target's address (%s, not %s)\n",
+					iptos(ip_hdr->ip_src.s_addr), iptos(dst_ip));
+				continue;
+			}
+
 			if (len < LIBNET_IP_H + LIBNET_TCP_H)
 			{
 				debug("Ignoring partial tcp packet\n");
 				continue;
 			}
 
-			tcp_hdr = (struct libnet_tcp_hdr *)(packet + LIBNET_IP_H);
-			debug("received tcp packet\n");
+			ALIGN_PACKET(tcp_hdr, libnet_tcp_hdr, 0 + LIBNET_IP_H);
+
+			debug("Received tcp packet %s:%d -> %s:%d, flags %s%s%s%s%s%s%s%s%s\n",
+				iptos(ip_hdr->ip_src.s_addr), ntohs(tcp_hdr->th_sport),
+				iptos(ip_hdr->ip_dst.s_addr), ntohs(tcp_hdr->th_dport),
+					tcp_hdr->th_flags & TH_RST  ? "RST " : "",
+					tcp_hdr->th_flags & TH_SYN  ? "SYN " : "",
+					tcp_hdr->th_flags & TH_ACK  ? "ACK " : "",
+					tcp_hdr->th_flags & TH_PUSH ? "PSH " : "",
+					tcp_hdr->th_flags & TH_FIN  ? "FIN " : "",
+					tcp_hdr->th_flags & TH_URG  ? "URG " : "",
+					tcp_hdr->th_flags & TH_CWR  ? "CWR " : "",
+					tcp_hdr->th_flags & TH_ECN  ? "ECN " : "",
+					tcp_hdr->th_flags ? "" : "(none)");
+
+			if ((ntohs(tcp_hdr->th_sport) != dst_prt)
+				|| (ntohs(tcp_hdr->th_dport) != record->src_prt))
+			{
+				debug("tcp packet doesn't contain the correct port numbers\n");
+				continue;
+			}
 
 			if (tcp_hdr->th_flags & TH_RST)
-				s = "closed";
-			else if (tcp_hdr->th_flags & TH_SYN && tcp_hdr->th_flags & TH_ACK)
-				s = "open";
+				safe_strncpy(record->state, "closed", TEXTSIZE);
+
+			else if ((tcp_hdr->th_flags & TH_SYN)
+					&& (tcp_hdr->th_flags & TH_ACK)
+					&& (tcp_hdr->th_flags & TH_ECN))
+				safe_strncpy(record->state, "open, ecn", TEXTSIZE);
+
+			else if ((tcp_hdr->th_flags & TH_SYN)
+					&& (tcp_hdr->th_flags & TH_ACK))
+				safe_strncpy(record->state, "open", TEXTSIZE);
+
 			else
-				s = "unknown";
+				safe_snprintf(record->state, TEXTSIZE, "unknown,%s%s%s%s%s%s%s%s%s",
+					tcp_hdr->th_flags & TH_RST  ? " RST" : "",
+					tcp_hdr->th_flags & TH_SYN  ? " SYN" : "",
+					tcp_hdr->th_flags & TH_ACK  ? " ACK" : "",
+					tcp_hdr->th_flags & TH_PUSH ? " PSH" : "",
+					tcp_hdr->th_flags & TH_FIN  ? " FIN" : "",
+					tcp_hdr->th_flags & TH_URG  ? " URG" : "",
+					tcp_hdr->th_flags & TH_CWR  ? " CWR" : "",
+					tcp_hdr->th_flags & TH_ECN  ? " ECN" : "",
+					tcp_hdr->th_flags ? "" : " no flags");
 
-			showprobe(ttl, q, ip_hdr->ip_src.s_addr, s,
-				"%.3f ms", delta);
-
+			record->delta = delta;
+			record->addr = ip_hdr->ip_src.s_addr;
+			safe_strncpy(record->string, "%.3f ms", TEXTSIZE);
 			return 1;
 		}
 
-		fatal("something bad happened\n");
+		debug("Ignoring non-ICMP and non-TCP received packet\n");
+		continue;
 	}
 }
 
-void trace(void)
+int trace(void)
 {
 	int ttl, q, done;
-	u_short id;
+	proberecord *record;
 
 	fprintf(stderr, "Tracing the path to %s on TCP port %s, %d hops max",
 		dst_name, dst_prt_name, o_maxttl);
-	
 	if (o_pktlen)
 		fprintf(stderr, ", %d byte packets", o_pktlen + LIBNET_TCP_H + LIBNET_IP_H);
 	fprintf(stderr, "\n");
 
 	for (ttl = o_minttl, done = 0; !done && ttl <= o_maxttl; ttl++)
 	{
-		for (q = 0; q < o_nqueries; q++)
+		for (q = 1; q <= o_nqueries; q++)
 		{
-			id = probe(ttl);
-			done |= capture(ttl, q + 1, id);
+			record = newproberecord();
+			probe(record, ttl, q);
+
+			debug("Sent probe %d of %d for hop %d, IP ID %d, source port %d, %s%s%s\n",
+				q, o_nqueries, ttl, record->id, record->src_prt,
+				o_syn ? "SYN " : "",
+				o_ack ? "ACK " : "",
+				o_ecn ? "CWR ECN " : "");
+
+			done += capture(record);
+
+			showprobe(record);
+			freeproberecord(record);
 		}
 	}
 
 	if (!done)
 		fprintf(stderr, "Destination not reached\n");
+
+	return done ? 0 : 1;
 }
 
-int main(int argc, char *argv[])
+/*
+ * Verify a command line argument is numeric; only to be called from main().
+ */
+
+int checknumericarg(void)
 {
-	struct servent *serv;
-	char *s;
+	if (! isnumeric(optarg))
+		fatal("Numeric argument required for -%c\n", optopt);
+
+	return atoi(optarg);
+}
+
+/*
+ * A kludge to help us process long command line arguments, only to be called
+ * using the CHECKLONG() macro, and only from main().  If the given word
+ * matches the current word being processed, it's removed from the argument
+ * list, and returns 1.
+ */
+
+#define CHECKLONG(word) ( checklong_real(word, &i, &argc, &argv) )
+
+int checklong_real(char *word, int *i, int *argc, char ***argv)
+{
+	int j;
+
+	if (strcmp((*argv)[*i], word) != 0)
+		return 0;
+
+	/* shift */
+	for (j = *i; (*argv)[j]; j++)
+		(*argv)[j] = (*argv)[j+1];
+
+	(*argc)--;
+	(*i)--;
+
+	return 1;
+}
+
+int main(int argc, char **argv)
+{
+	char *optstring, *s;
+	int op, i;
 
 	src_ip	= 0;
-	src_prt	= 0;
-	dst_prt	= 0;
+	src_prt = 0;
+	dst_prt	= 80;
 	src		= NULL;
 	device	= NULL;
+	interfaces = NULL;
 
 	o_minttl = 1;
 	o_maxttl = 30;
@@ -1142,149 +1760,225 @@ int main(int argc, char *argv[])
 	o_pktlen = 0;
 	o_tos	= 0;
 	o_ecn	= 0;
+	o_syn	= 0;
+	o_ack	= 0;
 	o_dontfrag = 0;
 	o_timeout = 3;
+	o_nofilter = 0;
+	o_noselect = 0;
+	o_nogetinterfaces = 0;
+
+#if defined (__SVR4) && defined (__sun)
+	o_trackport = 1; /* --track-port should be the default for Solaris */
+#else
+	o_trackport = 0; /* --track-id should be the default for everything else */
+#endif
 
 	/* strip out path from argv[0] */
 	for (name = s = argv[0]; s[0]; s++)
 		if (s[0] == '/' && s[1])
 			name = &s[1];
+	
+	/* First loop through and extract long command line arguments ... */
 
-	for (argc--, argv++; argc > 0; argc--, argv++)
+	for(i = 1; argv[i]; i++)
 	{
-		s = argv[0];
+		if (CHECKLONG("--help"))
+			usage();
 
-		if (strcmp("--", s) == 0)
+		if (CHECKLONG("--version"))
+			about();
+
+		/* undocumented, for debugging only */
+		if (CHECKLONG("--no-filter"))
 		{
-			argc--, argv++;
-			break;
+			o_nofilter = 1;
+			debug("o_nofilter set\n");
+			continue;
 		}
 
-		if (s[0] != '-')
+		/* undocumented, for debugging only */
+		if (CHECKLONG("--no-getinterfaces"))
+		{
+			o_nogetinterfaces = 1;
+			debug("o_nogetinterfaces set\n");
+			continue;
+		}
+
+		/* undocumented, for debugging only */
+		if (CHECKLONG("--no-select"))
+		{
+			o_noselect = 1;
+			debug("o_noselect set\n");
+			continue;
+		}
+
+		if (CHECKLONG("--track-id") ||
+			CHECKLONG("--track-ipid"))
+		{
+			o_trackport = 0;
+			debug("o_trackport disabled\n");
+			continue;
+		}
+
+		if (CHECKLONG("--track-port"))
+		{
+			o_trackport = 1;
+			debug("o_trackport set\n");
+			continue;
+		}
+
+		if (strcmp(argv[i], "--") == 0)
 			break;
 
-		if (strcmp("--help", s) == 0)
-			s = "-h";
+		if (argv[i][0] == '-' && argv[i][1] == '-')
+		{
+			fprintf(stderr, "Unknown command line argument: %s\n", argv[i]);
+			usage();
+		}
+	}
 
-		if (strcmp("--version", s) == 0)
-			s = "-v";
+	/* ... then handoff to getopt() */
 
-		for (s++; s[0]; s++)
-			switch(s[0])
+	opterr = 0;
+	optstring = "hvdnNi:l:f:Fm:P:p:q:w:s:t:SAE";
+
+	while ((op = getopt(argc, argv, optstring)) != -1)
+		switch(op)
+		{
+			case 'h':
+				usage();
+
+			case 'v':
+				about();
+
+			case 'd':
+				o_debug++;
+				debug("%s\n", VERSION);
+#ifdef LIBNET_VERSION
+				debug("Compiled with libpcap version %s, libnet version %s\n",
+					pcap_version, LIBNET_VERSION);
+#else
+				debug("Compiled with libpcap version %s\n", pcap_version);
+#endif
+				break;
+
+			case 'n':
+				o_numeric = 1;
+				debug("o_numeric set to 1\n");
+				break;
+
+			case 'N':
+				o_numeric = -1;
+				debug("o_numeric set to -1\n");
+				break;
+
+			case 'i': /* ARG */
+				device = optarg;
+				debug("device set to %s\n", device);
+				break;
+
+			case 'l': /* ARG */
+				o_pktlen = checknumericarg();
+				debug("o_pktlen set to %d\n", o_pktlen);
+				break;
+
+			case 'f': /* ARG */
+				o_minttl = checknumericarg();
+				debug("o_minttl set to %d\n", o_minttl);
+				break;
+
+			case 'F':
+				o_dontfrag = 1;
+				debug("o_dontfrag set\n");
+				break;
+
+			case 'm': /* ARG */
+				o_maxttl = checknumericarg();
+				debug("o_maxttl set to %d\n", o_maxttl);
+				break;
+
+			case 'P': /* ARG */
+				o_forceport = 1;
+			case 'p': /* ARG */
+				if (getuid()) fatal("Sorry, must be root to use -p\n");
+				src_prt = checknumericarg();
+				debug("src_prt set to %d\n", src_prt);
+				break;
+
+			case 'q': /* ARG */
+				o_nqueries = checknumericarg();
+				debug("o_nqueries set to %d\n", o_nqueries);
+				break;
+
+			case 'w': /* ARG */
+				o_timeout = checknumericarg();
+				debug("o_timeout set to %d\n", o_timeout);
+				break;
+
+			case 's': /* ARG */
+				if (getuid()) fatal("Sorry, must be root to use -s\n");
+				src = optarg;
+				break;
+
+			case 't': /* ARG */
+				o_tos = checknumericarg();
+				debug("o_tos set to %d\n", o_tos);
+				break;
+
+			case 'S':
+				o_syn = 1;
+				debug("o_syn set\n");
+				break;
+
+			case 'A':
+				o_ack = 1;
+				debug("o_ack set\n");
+				break;
+
+			case 'E':
+				o_ecn = 1;
+				debug("o_ecn set\n");
+				break;
+
+			case '?':
+			default:
+				if (optopt != ':' && strchr(optstring, optopt))
+					fatal("Argument required for -%c\n", optopt);
+				fprintf(stderr, "Unknown command line argument: -%c\n", optopt);
+				usage();
+		}
+
+	argc -= optind;
+	argv += optind;
+
+	switch(argc - 1)
+	{
+		case 2:
+			o_pktlen = atoi(argv[2]);
+
+		case 1:
+			if (isnumeric(argv[1]))
 			{
-				case 'h':
-					usage();
-
-				case 'v':
-					about();
-
-				case 'd':
-					o_debug++;
-					debug("Debugging enabled, for what it's worth\n");
-					break;
-
-				case 'n':
-					o_numeric = 1;
-					break;
-
-				case 'i':
-					if (argc < 2) fatal("Argument required for -i\n");
-					device = argv[1];
-					argc--, argv++;
-					break;
-
-				case 'l':
-					if (argc < 2) fatal("Argument required for -l\n");
-					o_pktlen = atoi(argv[1]);
-					argc--, argv++;
-					break;
-
-				case 'f':
-					if (argc < 2) fatal("Argument required for -f\n");
-					o_minttl = atoi(argv[1]);
-					argc--, argv++;
-					break;
-
-				case 'F':
-					o_dontfrag = 1;
-					debug("Will set DF bit in outgoing packets\n");
-					break;
-
-				case 'm':
-					if (argc < 2) fatal("Argument required for -m\n");
-					o_maxttl = atoi(argv[1]);
-					argc--, argv++;
-					break;
-
-				case 'P':
-					o_forceport = 1;
-				case 'p':
-					if (argc < 2) fatal("Argument required for -p\n");
-					if (getuid()) fatal("Sorry, must be root to use -p\n");
-					src_prt = atoi(argv[1]);
-					argc--, argv++;
-					break;
-
-				case 'q':
-					if (argc < 2) fatal("Argument required for -q\n");
-					o_nqueries = atoi(argv[1]);
-					argc--,argv++;
-					break;
-
-				case 'w':
-					if (argc < 2) fatal("Argument required for -w\n");
-					o_timeout = atoi(argv[1]);
-					argc--, argv++;
-					break;
-
-				case 's':
-					if (argc < 2) fatal("Argument required for -s\n");
-					if (getuid()) fatal("Sorry, must be root to use -s\n");
-					src = argv[1];
-					argc--, argv++;
-					break;
-
-				case 't':
-					if (argc < 2) fatal("Argument required for -t\n");
-					o_tos = atoi(argv[1]);
-					debug("TOS set to %d\n", o_tos);
-					argc--, argv++;
-					break;
-
-				case 'E':
-					o_ecn = 1;
-					debug("Enabled ECN support\n");
-					break;
-
-				default:
-					fprintf(stderr, "Unknown command line argument: -%c\n", s[0]);
-					usage();
+				dst_prt = atoi(argv[1]);
 			}
-	}
-
-	if (argc < 1 || argc > 3)
-		usage();
-
-	dst = argv[0];
-
-	if (argc > 1)
-	{
-		dst_prt = atoi(argv[1]);
-
-		if (dst_prt == 0)
-		{
-			if ((serv = getservbyname(argv[1], "tcp")) == NULL)
-				fatal("Unknown port: %s\n", argv[1]);
 			else
+			{
+				struct servent *serv;
+
+				if ((serv = getservbyname(argv[1], "tcp")) == NULL)
+					fatal("Unknown port: %s\n", argv[1]);
+
 				dst_prt = ntohs(serv->s_port);
-		}
+			}
+
+		case 0:
+			dst = argv[0];
+			break;
+
+		default:
+			usage();
 	}
-
-	if (argc > 2)
-		o_pktlen = atoi(argv[2]);
-
-	if (dst_prt == 0)
-		dst_prt = 80;
 
 	if (getuid() & geteuid())
 		fatal("Got root?\n");
@@ -1292,7 +1986,5 @@ int main(int argc, char *argv[])
 	defaults();
 	initcapture();
 	seteuid(getuid());
-	trace();
-
-	return 0;
+	return trace();
 }
