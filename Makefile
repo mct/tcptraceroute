@@ -1,7 +1,7 @@
 # vim:set ts=4 sw=4 ai:
 
 # tcptraceroute -- A traceroute implementation using TCP packets
-# Copyright (c) 2001, 2002 Michael C. Toren <mct@toren.net>
+# Copyright (c) 2001, Michael C. Toren <mct@toren.net>
 
 CC = gcc
 CFLAGS = -O2 -Wall

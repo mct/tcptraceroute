@@ -3,39 +3,7 @@ Extracted from tcptraceroute.c:
 /*
  * Revision history:
  *
- *  Version 1.3 (2002-05-19)
- *
- *      Now detects (and ignores) IP packets with IP options.
- *
- *      Packets are now properly aligned by allocating new space and
- *      copying the packet data there before casting packet header
- *      structs against them.
- *
- *      New, undocumented --no-select command line argument added to never
- *      call select(), which fails to indicate that a BPF socket is ready
- *      for reading on some BSD systems.
- *
- *      Now sets a non-zero exit code if the destination was not reached,
- *      as suggested by Arndt Schoenewald <arndt@schoenewald.de>
- *
- *      Fixes an off-by-one error in getinterfaces(), discovered by
- *      Kit Knox <kit@rootshell.com>.
- *
- *      probe() and capture() now use a new proberecord structure which
- *      contains information about each probe in a modularized way.
- *
- *      Added a new command line argument, --track-port, which causes each
- *      probe to have a unique source port so that something other than the
- *      IP ID can be used to track it, and also a corresponding --track-id
- *      argument to specify the old behavior of tracking IP ID's.  If a
- *      source port is specified with -p, --track-id is implied.  The
- *      compile-time default on Solaris is --track-port, enabling
- *      tcptraceroute to work out-of-the-box, and --track-id on all other
- *      platforms.
- *
- *      probe() now calls allocateid() to generate an IP ID, which
- *      caches the last ALLOCATEID_CACHE_SIZE allocations to prevent
- *      against duplicates.
+ *  Version 1.3beta1 (2001-08-14)
  *
  *      Display "!<N>" instead of "!?" for unknown ICMP codes, as
  *      suggested by Kevin McAllister <kevin@mcallister.net>
@@ -47,11 +15,9 @@ Extracted from tcptraceroute.c:
  *      single data structure, which is much more logical, and less
  *      prone to error.
  *
- *      Improved command line argument handling a good deal, based
- *      on suggestions by Scott Fenton <scott@matts-books.com>.  First,
- *      a pass through is made to process and shift out long command
- *      line arguments, then the remaining command line is passed to
- *      getopt().
+ *      Improved command line argument handling a good deal, based on
+ *      suggestions by Scott Fenton <scott@matts-books.com>.  "-q 3",
+ *      "-q3", "-qw 3 1", and "-q3w1" are all perfectly legal, now.
  *
  *      It is now possible to traceroute to yourself, by switching the
  *      device to the loopback interface if the destination matches the
@@ -60,9 +26,9 @@ Extracted from tcptraceroute.c:
  *      filter on the loopback interface to avoid apparent libpcap bugs
  *      which previously made it impossible to traceroute to 127.0.0.1
  *
- *      Added -S and -A command line arguments to control the SYN
- *      and ACK flags in outgoing packets.  By using -A, it is now
- *      possible to traceroute through stateless firewalls which
+ *      Added -S and -A command line arguments to control the state of
+ *      the SYN and ACK flags in outgoing packets.  By using -A, it is
+ *      now possible to traceroute through stateless firewalls which
  *      permit hosts behind the firewalls to establish outgoing TCP
  *      connections.  In the absence of either -A or -S, -S is set.
  *
@@ -75,15 +41,15 @@ Extracted from tcptraceroute.c:
  *
  *      Contains large portions of code and ideas contributed by
  *      Scott Gifford <sgifford@tir.com>
- *
- *      Attempt to determine what outgoing interface to use based on
- *      the destination address and the local system's interface list.
- *      Could still use a good deal of work on BSD systems, though,
- *      especially when it comes to virtual addresses which reside on
- *      subnets different than the primary address.
  *      
- *      The timeout code has been reworked significantly, and should
- *      now be much more reliable.
+ *      Attempt to determine what outgoing interface to use based on the
+ *      destination address and the local system's interface list.  Could still
+ *      use a good deal of work on BSD systems, though, especially when it
+ *      comes to virtual addresses which reside on subnets different than the
+ *      primary address.
+ *
+ *      The timeout code has been reworked significantly, and should now be
+ *      much more reliable.
  *      
  *      Added -E command line argument to send ECN (RFC2481) packets.
  *      Requested by Christophe Barb <christophe.barbe@lineo.fr> and

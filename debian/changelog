@@ -1,11 +1,3 @@
-tcptraceroute (1.3-0potato1) stable; urgency=low
-
-  * New upstream version.
-  * Closes: #147463: Show if remote host supports ECN if -E is used
-  * Closes: #136999: relies on bpf to filter tcp correctly
-
- -- Michael C. Toren <mct@toren.net>  Sun, 19 May 2002 21:21:25 -0400
-
 tcptraceroute (1.2-0potato1) stable; urgency=low
 
   * New upstream version.
