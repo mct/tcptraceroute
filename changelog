@@ -3,7 +3,25 @@ Extracted from tcptraceroute.c:
 /*
  * Revision history:
  *
- *  Version 1.3beta6 (2001-12-15)
+ *  Version 1.3beta7 (2002-05-10)
+ *
+ *      Packets are now properly aligned by allocating new space and
+ *      copying the packet data there before casting packet header
+ *      structs against them.
+ *
+ *      Command line argument handling now uses getopt(), after looping
+ *      through and stripping out the long options by hand, in an attempt
+ *      to be as portable as possible.
+ *
+ *      New, undocumented --no-select command line argument added to never
+ *      call select(), which fails to indicate that a BPF socket is ready
+ *      for reading on some BSD systems.
+ *
+ *      Now sets a non-zero exit code if the destination was not reached,
+ *      as suggested by Arndt Schoenewald <arndt@schoenewald.de>
+ *
+ *      Fixes an off-by-one error in getinterfaces(), discovered by
+ *      Kit Knox <kit@rootshell.com>.
  *
  *      probe() and capture() now use a new proberecord structure which
  *      contains information about each probe in a modularized way.
@@ -31,9 +49,11 @@ Extracted from tcptraceroute.c:
  *      single data structure, which is much more logical, and less
  *      prone to error.
  *
- *      Improved command line argument handling a good deal, based on
- *      suggestions by Scott Fenton <scott@matts-books.com>.  "-q 3",
- *      "-q3", "-qw 3 1", and "-q3w1" are all perfectly legal, now.
+ *      Improved command line argument handling a good deal, based
+ *      on suggestions by Scott Fenton <scott@matts-books.com>.  First,
+ *      a pass through is made to process and shift out long command
+ *      line arguments, then the remaining command line is passed to
+ *      getopt().
  *
  *      It is now possible to traceroute to yourself, by switching the
  *      device to the loopback interface if the destination matches the

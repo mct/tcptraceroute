@@ -1,7 +1,7 @@
 # vim:set ts=4 sw=4 ai:
 
 # tcptraceroute -- A traceroute implementation using TCP packets
-# Copyright (c) 2001, Michael C. Toren <mct@toren.net>
+# Copyright (c) 2001, 2002 Michael C. Toren <mct@toren.net>
 
 CC = gcc
 CFLAGS = -O2 -Wall
@@ -11,6 +11,12 @@ tcptraceroute: tcptraceroute.c
 	$(CC) $(CFLAGS) `libnet-config --defines` \
 		-o tcptraceroute tcptraceroute.c \
 		`libnet-config --libs` -lpcap
+
+6:
+	$(MAKE) CFLAGS="$(CFLAGS) -L/usr/local/pkg/libpcap-0.6.2/lib -I/usr/local/pkg/libpcap-0.6.2/include"
+
+7:
+	$(MAKE) CFLAGS="$(CFLAGS) -L/usr/local/pkg/libpcap-0.7.1/lib -I/usr/local/pkg/libpcap-0.7.1/include"
 
 static:
 	$(MAKE) tcptraceroute CFLAGS="$(CFLAGS) -static"

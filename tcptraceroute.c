@@ -1,9 +1,9 @@
 /* -*- Mode: c; tab-width: 4; indent-tabs-mode: 1; c-basic-offset: 4; -*- */
-/* vim:set ts=4 sw=4 ai nobackup nocindent: */
+/* vim:set ts=4 sw=4 ai nobackup nocindent sm: */
 
 /*
  * tcptraceroute -- A traceroute implementation using TCP packets
- * Copyright (c) 2001, Michael C. Toren <mct@toren.net>
+ * Copyright (c) 2001, 2002  Michael C. Toren <mct@toren.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License, version 2, as published
@@ -30,14 +30,32 @@
  * Updates are available from http://michael.toren.net/code/tcptraceroute/
  */
 
-#define VERSION "tcptraceroute 1.3beta6 (2001-12-15)"
-#define BANNER  "Copyright (c) 2001, Michael C. Toren <mct@toren.net>\n\
+#define VERSION "tcptraceroute 1.3beta7 (2002-05-10)"
+#define BANNER  "Copyright (c) 2001, 2002 Michael C. Toren <mct@toren.net>\n\
 Updates are available from http://michael.toren.net/code/tcptraceroute/\n"
 
 /*
  * Revision history:
  *
- *	Version 1.3beta6 (2001-12-15)
+ *	Version 1.3beta7 (2002-05-10)
+ *
+ *		Packets are now properly aligned by allocating new space and
+ *		copying the packet data there before casting packet header
+ *		structs against them.
+ *
+ *		Command line argument handling now uses getopt(), after looping
+ *		through and stripping out the long options by hand, in an attempt
+ *		to be as portable as possible.
+ *
+ *		New, undocumented --no-select command line argument added to never
+ *		call select(), which fails to indicate that a BPF socket is ready
+ *		for reading on some BSD systems.
+ *
+ *		Now sets a non-zero exit code if the destination was not reached,
+ *		as suggested by Arndt Schoenewald <arndt@schoenewald.de>
+ *
+ *		Fixes an off-by-one error in getinterfaces(), discovered by
+ *		Kit Knox <kit@rootshell.com>.
  *
  *		probe() and capture() now use a new proberecord structure which
  *		contains information about each probe in a modularized way.
@@ -65,9 +83,11 @@ Updates are available from http://michael.toren.net/code/tcptraceroute/\n"
  *		single data structure, which is much more logical, and less
  *		prone to error.
  *
- *		Improved command line argument handling a good deal, based on
- *		suggestions by Scott Fenton <scott@matts-books.com>.  "-q 3",
- *		"-q3", "-qw 3 1", and "-q3w1" are all perfectly legal, now.
+ *		Improved command line argument handling a good deal, based
+ *		on suggestions by Scott Fenton <scott@matts-books.com>.  First,
+ *		a pass through is made to process and shift out long command
+ *		line arguments, then the remaining command line is passed to
+ *		getopt().
  *
  *		It is now possible to traceroute to yourself, by switching the
  *		device to the loopback interface if the destination matches the
@@ -144,6 +164,10 @@ Updates are available from http://michael.toren.net/code/tcptraceroute/\n"
  * TODO:
  *
  * - We really should be using GNU autoconf.
+ * - Command line argument handling could be improved.  Currently,
+ *   long options are always processed before short options, which
+ *   means that debugging will always be disabled when long options
+ *   are processed.
  */
 
 #include <stdarg.h>
@@ -159,6 +183,7 @@ Updates are available from http://michael.toren.net/code/tcptraceroute/\n"
 #include <netinet/in.h>
 #include <netdb.h>
 #include <sys/ioctl.h>
+#include <fcntl.h>
 
 #ifndef __OpenBSD__
 #include <net/if.h> /* Why doesn't OpenBSD deal with this for us? */
@@ -176,8 +201,8 @@ Updates are available from http://michael.toren.net/code/tcptraceroute/\n"
 #define AF_LINK AF_INET /* BSD defines some AF_INET network interfaces as AF_LINK */
 #endif
 
-#ifdef __OpenBSD__
-#define HASSALEN /* Awful, awful hack to make subinterfaces work on OpenBSD. */
+#if defined (__OpenBSD__) || defined(__FreeBSD__) || defined(__bsdi__)
+#define HASSALEN /* Awful, awful hack to make subinterfaces work on BSD. */
 #endif
 
 /* ECN (RFC2481) */
@@ -276,11 +301,12 @@ char *device, *name, *dst, *src;
 char dst_name[TEXTSIZE], dst_prt_name[TEXTSIZE], filter[TEXTSIZE];
 char errbuf[PCAP_ERRBUF_SIZE];
 pcap_t *pcap;
+int pcap_fd;
 struct timeval now;
 int	sockfd, datalink, offset;
 int o_minttl, o_maxttl, o_timeout, o_debug, o_numeric, o_pktlen,
 	o_nqueries, o_dontfrag, o_tos, o_forceport, o_syn, o_ack, o_ecn,
-	o_nofilter, o_nogetinterfaces, o_trackport;
+	o_nofilter, o_nogetinterfaces, o_noselect, o_trackport;
 
 /* interface linked list, built later by getinterfaces() */
 struct interface_entry {
@@ -300,6 +326,8 @@ typedef struct {
 	char *string;
 } proberecord;
 
+extern char *optarg;
+extern int optind, opterr, optopt;
 extern char pcap_version[];
 extern int errno;
 
@@ -361,7 +389,6 @@ void usage(void)
 void about(void)
 {
 	printf("\n%s\n%s\n", VERSION, BANNER);
-	debug("Compiled with libpcap version %s\n\n",pcap_version);
 	exit(0);
 }
 
@@ -380,7 +407,7 @@ void *xrealloc(void *oldp, int size)
 		p = realloc(oldp, size);
 	
 	if (!p)
-		fatal("Out of memory!  Could not reallocate %d bytes!X\n", size);
+		fatal("Out of memory!  Could not reallocate %d bytes!\n", size);
 	
 	memset(p, 0, size);
 	return p;
@@ -425,10 +452,28 @@ char *sprintable(char *s)
 		safe_strncpy(buf, "(empty)", TEXTSIZE);
 
 	for (i = 0; buf[i]; i++)
-		if (! isprint((unsigned char) buf[i]))
+		if (! isprint((u_char) buf[i]))
 			buf[i] = '?';
 
 	return buf;
+}
+
+/*
+ * isdigit() across an entire string.
+ */
+
+int isnumeric(char *s)
+{
+	int i;
+
+	if (!s || !s[0])
+		return 0;
+
+	for (i = 0; s[i]; i++)
+		if (! isdigit(s[i]))
+			return 0;
+	
+	return 1;
 }
 
 int datalinkoffset(int type)
@@ -640,6 +685,7 @@ void getinterfaces(void)
 		strcpy(ifr.ifr_name, ifrp->ifr_name);
 
 #ifdef HASSALEN
+
 		salen = sizeof(ifrp->ifr_name) + ifrp->ifr_addr.sa_len;
 		if (salen < sizeof(*ifrp))
 			salen = sizeof(*ifrp);
@@ -658,10 +704,20 @@ void getinterfaces(void)
 
 #endif /* HASSALEN else */
 
+#ifdef AF_INET6
+		if (ifrp->ifr_addr.sa_family == AF_INET6)
+		{
+			debug("Ignoring AF_INET6 address on interface %s\n",
+				sprintable(ifr.ifr_name));
+			continue;
+		}
+#endif
+
 		if (ifrp->ifr_addr.sa_family != AF_INET &&
 			ifrp->ifr_addr.sa_family != AF_LINK)
 		{
-			debug("Ignoring non-AF_INET interface %s\n", sprintable(ifr.ifr_name));
+			debug("Ignoring non-AF_INET address on interface %s\n",
+				sprintable(ifr.ifr_name));
 			continue;
 		}
 
@@ -669,7 +725,8 @@ void getinterfaces(void)
 			pfatal("ioctl(SIOCGIFFLAGS)");
 		if ((ifr.ifr_flags & IFF_UP) == 0)
 		{
-			debug("Ignoring down interface %s\n", sprintable(ifr.ifr_name));
+			debug("Ignoring down interface %s\n",
+				sprintable(ifr.ifr_name));
 			continue;
 		}
 
@@ -798,7 +855,10 @@ u_short allocateport(u_short requested)
  * the last ALLOCATEID_CACHE_SIZE allocations, so we can check for duplicates.
  */
 
-#define ALLOCATEID_CACHE_SIZE 90
+#ifndef ALLOCATEID_CACHE_SIZE
+#define ALLOCATEID_CACHE_SIZE 512
+#endif
+
 u_short allocateid(void)
 {
 	static u_short ids[ALLOCATEID_CACHE_SIZE];
@@ -970,6 +1030,9 @@ void debugoptions(void)
 		"o_trackport", o_trackport,
 		"datalinkname", datalinkname(datalink),
 		"device", device);
+
+	debug("%16s: %-2d\n",
+		"o_noselect", o_noselect);
 }
 
 /*
@@ -1129,6 +1192,10 @@ void initcapture(void)
 
 	if (pcap_setfilter(pcap, &fcode) < 0)
 		fatal("pcap_setfilter failed\n");
+
+	pcap_fd = pcap_fileno(pcap);
+	if (fcntl(pcap_fd, F_SETFL, O_NONBLOCK) < 0)
+		pfatal("fcntl(F_SETFL, O_NONBLOCK) failed");
 }
 
 /*
@@ -1227,6 +1294,21 @@ void probe(proberecord *record, int ttl, int q)
 }
 
 /*
+ * Horrible macro kludge, to be called only from capture(), for architectures
+ * such as sparc that don't allow non-aligned memory access.  The idea is to
+ * malloc new space (which is guaranteed to be properly aligned), copy the
+ * packet we want to parse there, then cast the packet header struct against
+ * the new, aligned space.
+ */
+
+#define ALIGN_PACKET(dest, cast, offset) do { \
+		static u_char *buf; \
+		if (buf == NULL) buf = xrealloc(NULL, SNAPLEN - (offset)); \
+		memcpy(buf, packet + (offset), len - (offset)); \
+		dest = (struct cast *)buf; \
+	} while (0) /* no semi-colon */
+
+/*
  * Listens for responses to our probe matching the specified proberecord
  * structure.  Returns 1 if the destination was reached, or 0 if we need to
  * increment the TTL some more.
@@ -1236,11 +1318,9 @@ int capture(proberecord *record)
 {
 	u_char *packet;
 	struct pcap_pkthdr packet_hdr;
-	struct libnet_ip_hdr *ip_hdr, *old_ip_hdr;
-	struct libnet_tcp_hdr *tcp_hdr, *old_tcp_hdr;
-	struct libnet_icmp_hdr *icmp_hdr;
+	struct libnet_ip_hdr *ip_hdr;
 	struct timeval start, now, timepassed, timeout_tv, timeleft;
-	int pcap_fd, firstpass, ret, len;
+	int firstpass, ret, len;
 	double delta;
 	fd_set sfd;
 
@@ -1292,11 +1372,12 @@ int capture(proberecord *record)
 		 *   http://www.tcpdump.org/lists/workers/2001/03/msg00110.html
 		 */
 
-		pcap_fd = pcap_fileno(pcap);
 		FD_ZERO(&sfd);
 		FD_SET(pcap_fd, &sfd);
 
-		if ((ret = select(pcap_fd + 1, &sfd, NULL, NULL, &timeleft)) < 0)
+		ret = o_noselect ? 1 : select(pcap_fd + 1, &sfd, NULL, NULL, &timeleft);
+
+		if (ret < 0)
 		{
 			fatal("select");
 		}
@@ -1314,15 +1395,22 @@ int capture(proberecord *record)
 
 		packet += offset;
 		len = packet_hdr.caplen - offset;
-		debug("received %d byte packet from pcap_next()\n", len);
+
+		debug("received %d byte IP packet from pcap_next()\n", len);
 
 		if (len < LIBNET_IP_H)
 		{
-			debug("ignoring partial ip packet\n");
+			debug("Ignoring partial IP packet\n");
 			continue;
 		}
 
-		ip_hdr = (struct libnet_ip_hdr *)packet;
+		if (len > SNAPLEN)
+		{
+			debug("Packet received is larger than our snaplen?  Ignoring\n", SNAPLEN);
+			continue;
+		}
+
+		ALIGN_PACKET(ip_hdr, libnet_ip_hdr, 0);
 
 		if (ip_hdr->ip_dst.s_addr != src_ip)
 		{
@@ -1339,14 +1427,18 @@ int capture(proberecord *record)
 
 		if (ip_hdr->ip_p == IPPROTO_ICMP)
 		{
+			struct libnet_icmp_hdr *icmp_hdr;
+			struct libnet_ip_hdr *old_ip_hdr;
+			struct libnet_tcp_hdr *old_tcp_hdr;
+
 			if (len < LIBNET_IP_H + LIBNET_ICMP_H + 4)
 			{
 				debug("Ignoring partial icmp packet\n");
 				continue;
 			}
 
-			icmp_hdr = (struct libnet_icmp_hdr *)(packet + LIBNET_IP_H);
-			debug("received icmp packet\n");
+			ALIGN_PACKET(icmp_hdr, libnet_icmp_hdr, 0 + LIBNET_IP_H);
+			debug("Received icmp packet\n");
 
 			/*
 			 * The IP header that generated the ICMP packet is quoted
@@ -1359,12 +1451,12 @@ int capture(proberecord *record)
 				continue;
 			}
 
-			old_ip_hdr = (struct libnet_ip_hdr *)(packet +
-				LIBNET_IP_H + LIBNET_ICMP_H + 4);
+			ALIGN_PACKET(old_ip_hdr, libnet_ip_hdr,
+				0 + LIBNET_IP_H + LIBNET_ICMP_H + 4);
 
 			/* The entire TCP header isn't here, but the port numbers are */
-			old_tcp_hdr = (struct libnet_tcp_hdr *)(packet +
-					LIBNET_IP_H + LIBNET_ICMP_H + 4 + LIBNET_IP_H);
+			ALIGN_PACKET(old_tcp_hdr, libnet_tcp_hdr,
+				0 + LIBNET_IP_H + LIBNET_ICMP_H + 4 + LIBNET_IP_H);
 
 			if (old_ip_hdr->ip_dst.s_addr != dst_ip)
 			{
@@ -1417,6 +1509,9 @@ int capture(proberecord *record)
 					case ICMP_UNREACH_PROTOCOL:
 						safe_strncpy(s, "!P", TEXTSIZE); break;
 
+					case ICMP_UNREACH_PORT:
+						safe_strncpy(s, "!p", TEXTSIZE); break;
+
 					case ICMP_UNREACH_NEEDFRAG:
 						safe_strncpy(s, "!F", TEXTSIZE); break;
 
@@ -1441,7 +1536,6 @@ int capture(proberecord *record)
 					case ICMP_UNREACH_TOSHOST:
 						safe_strncpy(s, "!T", TEXTSIZE); break;
 
-					case ICMP_UNREACH_PORT:
 					case ICMP_UNREACH_HOST_PRECEDENCE:
 					case ICMP_UNREACH_PRECEDENCE_CUTOFF:
 					default:
@@ -1476,6 +1570,8 @@ int capture(proberecord *record)
 
 		if (ip_hdr->ip_p == IPPROTO_TCP)
 		{
+			struct libnet_tcp_hdr *tcp_hdr;
+
 			if (ip_hdr->ip_src.s_addr != dst_ip)
 			{
 				debug("tcp packet's origin does not match our target's address (%s, not %s)\n",
@@ -1489,7 +1585,7 @@ int capture(proberecord *record)
 				continue;
 			}
 
-			tcp_hdr = (struct libnet_tcp_hdr *)(packet + LIBNET_IP_H);
+			ALIGN_PACKET(tcp_hdr, libnet_tcp_hdr, 0 + LIBNET_IP_H);
 
 			debug("Received tcp packet %s:%d -> %s:%d, flags %s%s%s%s%s%s%s%s%s\n",
 				iptos(ip_hdr->ip_src.s_addr), ntohs(tcp_hdr->th_sport),
@@ -1546,7 +1642,7 @@ int capture(proberecord *record)
 	}
 }
 
-void trace(void)
+int trace(void)
 {
 	int ttl, q, done;
 	proberecord *record;
@@ -1579,63 +1675,56 @@ void trace(void)
 
 	if (!done)
 		fprintf(stderr, "Destination not reached\n");
+
+	return done ? 0 : 1;
 }
 
 /*
- * Kludge to suck in a numeric argument to a command line switch.  It's a
- * little ugly, but by not using getopt(3), we're able to support "-q 3",
- * "-q3", "-qw 3 1", and "-q3w1".
+ * Verify a command line argument is numeric; only to be called from main().
  */
 
-int getnopt(char **in, int *argc, char **argv[])
+int checknumericarg(void)
 {
-	int value, i;
-	char *s, opt, buf[TEXTSIZE];
+	if (! isnumeric(optarg))
+		fatal("Numeric argument required for -%c\n", optopt);
 
-	s = (*in);
-	opt = s[0];
-	s++;
-
-	if (isdigit((unsigned char) s[0]))
-	{
-		safe_strncpy(buf, s, TEXTSIZE);
-
-		for (i = 0; buf[i]; i++)
-			if (!isdigit((unsigned char) buf[i]))
-			{
-				buf[i] = '\0';
-				break;
-			}
-
-		value = atoi(buf);
-		(*in) += i;
-	}
-
-	else
-	{
-		if (*argc < 2)
-			fatal("Argument required for -%c\n", opt);
-
-		(*argc)--, (*argv)++;
-
-		for (s = (*argv)[0], i = 0; s[i]; i++)
-			if (!isdigit((unsigned char) s[i]))
-				fatal("Numeric argument required for -%c\n", opt);
-
-		value = atoi(s);
-	}
-
-	return value;
+	return atoi(optarg);
 }
 
-int main(int argc, char *argv[])
+/*
+ * A kludge to help us process long command line arguments, only to be called
+ * using the CHECKLONG() macro, and only from main().  If the given word
+ * matches the current word being processed, it's removed from the argument
+ * list, and returns 1.
+ */
+
+#define CHECKLONG(word) ( checklong_real(word, &i, &argc, &argv) )
+
+int checklong_real(char *word, int *i, int *argc, char ***argv)
 {
-	struct servent *serv;
-	char *s;
+	int j;
+
+	if (strcmp((*argv)[*i], word) != 0)
+		return 0;
+
+	/* shift */
+	for (j = *i; (*argv)[j]; j++)
+		(*argv)[j] = (*argv)[j+1];
+
+	(*argc)--;
+	(*i)--;
+
+	return 1;
+}
+
+int main(int argc, char **argv)
+{
+	char *optstring, *s;
+	int op, i;
 
 	src_ip	= 0;
 	src_prt = 0;
-	dst_prt	= 0;
+	dst_prt	= 80;
 	src		= NULL;
 	device	= NULL;
 	interfaces = NULL;
@@ -1654,6 +1743,7 @@ int main(int argc, char *argv[])
 	o_dontfrag = 0;
 	o_timeout = 3;
 	o_nofilter = 0;
+	o_noselect = 0;
 	o_nogetinterfaces = 0;
 
 #if defined (__SVR4) && defined (__sun)
@@ -1666,28 +1756,19 @@ int main(int argc, char *argv[])
 	for (name = s = argv[0]; s[0]; s++)
 		if (s[0] == '/' && s[1])
 			name = &s[1];
+	
+	/* First loop through and extract long command line arguments ... */
 
-	for (argc--, argv++; argc; argc--, argv++)
+	for(i = 1; argv[i]; i++)
 	{
-		s = argv[0];
+		if (CHECKLONG("--help"))
+			usage();
 
-		if (s[0] != '-')
-			break;
-
-		if (strcmp("--", s) == 0)
-		{
-			argc--, argv++;
-			break;
-		}
-
-		if (strcmp("--help", s) == 0)
-			s = "-h";
-
-		if (strcmp("--version", s) == 0)
-			s = "-v";
+		if (CHECKLONG("--version"))
+			about();
 
 		/* undocumented, for debugging only */
-		if (strcmp("--no-filter", s) == 0)
+		if (CHECKLONG("--no-filter"))
 		{
 			o_nofilter = 1;
 			debug("o_nofilter set\n");
@@ -1695,159 +1776,187 @@ int main(int argc, char *argv[])
 		}
 
 		/* undocumented, for debugging only */
-		if (strcmp("--no-getinterfaces", s) == 0)
+		if (CHECKLONG("--no-getinterfaces"))
 		{
 			o_nogetinterfaces = 1;
 			debug("o_nogetinterfaces set\n");
 			continue;
 		}
 
-		if ((strcmp("--track-id", s) == 0)
-			|| (strcmp("--track-ipid", s) == 0))
+		/* undocumented, for debugging only */
+		if (CHECKLONG("--no-select"))
+		{
+			o_noselect = 1;
+			debug("o_noselect set\n");
+			continue;
+		}
+
+		if (CHECKLONG("--track-id") ||
+			CHECKLONG("--track-ipid"))
 		{
 			o_trackport = 0;
 			debug("o_trackport disabled\n");
 			continue;
 		}
 
-		if (strcmp("--track-port", s) == 0)
+		if (CHECKLONG("--track-port"))
 		{
 			o_trackport = 1;
 			debug("o_trackport set\n");
 			continue;
 		}
 
-		if (s[0] == '-' && s[1] == '-')
+		if (strcmp(argv[i], "--") == 0)
+			break;
+
+		if (argv[i][0] == '-' && argv[i][1] == '-')
 		{
-			fprintf(stderr, "Unknown command line argument: %s\n", s);
+			fprintf(stderr, "Unknown command line argument: %s\n", argv[i]);
 			usage();
 		}
-
-		for (s++; s[0]; s++)
-			switch(s[0])
-			{
-				case 'h':
-					usage();
-
-				case 'v':
-					about();
-
-				case 'd':
-					o_debug++;
-					debug("%s\n", VERSION);
-					break;
-
-				case 'n':
-					o_numeric = 1;
-					debug("o_numeric set to 1\n");
-					break;
-
-				case 'N':
-					o_numeric = -1;
-					debug("o_numeric set to -1\n");
-					break;
-
-				case 'i':
-					if (argc < 2) fatal("Argument required for -i\n");
-					argc--, argv++;
-					device = argv[0];
-					debug("device set to %s\n", device);
-					break;
-
-				case 'l':
-					o_pktlen = getnopt(&s, &argc, &argv);
-					debug("o_pktlen set to %d\n", o_pktlen);
-					break;
-
-				case 'f':
-					o_minttl = getnopt(&s, &argc, &argv);
-					debug("o_minttl set to %d\n", o_minttl);
-					break;
-
-				case 'F':
-					o_dontfrag = 1;
-					debug("o_dontfrag set\n");
-					break;
-
-				case 'm':
-					o_maxttl = getnopt(&s, &argc, &argv);
-					debug("o_maxttl set to %d\n", o_maxttl);
-					break;
-
-				case 'P':
-					o_forceport = 1;
-				case 'p':
-					if (getuid()) fatal("Sorry, must be root to use -p\n");
-					src_prt = getnopt(&s, &argc, &argv);
-					debug("src_prt set to %d\n", src_prt);
-					break;
-
-				case 'q':
-					o_nqueries = getnopt(&s, &argc, &argv);
-					debug("o_nqueries set to %d\n", o_nqueries);
-					break;
-
-				case 'w':
-					o_timeout = getnopt(&s, &argc, &argv);
-					debug("o_timeout set to %d\n", o_timeout);
-					break;
-
-				case 's':
-					if (argc < 2) fatal("Argument required for -s\n");
-					if (getuid()) fatal("Sorry, must be root to use -s\n");
-					argc--, argv++;
-					src = argv[0];
-					break;
-
-				case 't':
-					o_tos = getnopt(&s, &argc, &argv);
-					debug("o_tos set to %d\n", o_tos);
-					break;
-
-				case 'S':
-					o_syn = 1;
-					debug("o_syn set\n");
-					break;
-
-				case 'A':
-					o_ack = 1;
-					debug("o_ack set\n");
-					break;
-
-				case 'E':
-					o_ecn = 1;
-					debug("o_ecn set\n");
-					break;
-
-				default:
-					fprintf(stderr, "Unknown command line argument: -%c\n", s[0]);
-					usage();
-			}
 	}
 
-	if (argc < 1 || argc > 3)
-		usage();
+	/* ... then handoff to getopt() */
 
-	dst = argv[0];
+	opterr = 0;
+	optstring = "hvdnNi:l:f:Fm:P:p:q:w:s:t:SAE";
 
-	if (argc > 1)
-	{
-		dst_prt = atoi(argv[1]);
-
-		if (dst_prt == 0)
+	while ((op = getopt(argc, argv, optstring)) != -1)
+		switch(op)
 		{
-			if ((serv = getservbyname(argv[1], "tcp")) == NULL)
-				fatal("Unknown port: %s\n", argv[1]);
-			else
-				dst_prt = ntohs(serv->s_port);
+			case 'h':
+				usage();
+
+			case 'v':
+				about();
+
+			case 'd':
+				o_debug++;
+				debug("%s\n", VERSION);
+#ifdef LIBNET_VERSION
+				debug("Compiled with libpcap version %s, libnet version %s\n",
+					pcap_version, LIBNET_VERSION);
+#else
+				debug("Compiled with libpcap version %s\n", pcap_version);
+#endif
+				break;
+
+			case 'n':
+				o_numeric = 1;
+				debug("o_numeric set to 1\n");
+				break;
+
+			case 'N':
+				o_numeric = -1;
+				debug("o_numeric set to -1\n");
+				break;
+
+			case 'i': /* ARG */
+				device = optarg;
+				debug("device set to %s\n", device);
+				break;
+
+			case 'l': /* ARG */
+				o_pktlen = checknumericarg();
+				debug("o_pktlen set to %d\n", o_pktlen);
+				break;
+
+			case 'f': /* ARG */
+				o_minttl = checknumericarg();
+				debug("o_minttl set to %d\n", o_minttl);
+				break;
+
+			case 'F':
+				o_dontfrag = 1;
+				debug("o_dontfrag set\n");
+				break;
+
+			case 'm': /* ARG */
+				o_maxttl = checknumericarg();
+				debug("o_maxttl set to %d\n", o_maxttl);
+				break;
+
+			case 'P': /* ARG */
+				o_forceport = 1;
+			case 'p': /* ARG */
+				if (getuid()) fatal("Sorry, must be root to use -p\n");
+				src_prt = checknumericarg();
+				debug("src_prt set to %d\n", src_prt);
+				break;
+
+			case 'q': /* ARG */
+				o_nqueries = checknumericarg();
+				debug("o_nqueries set to %d\n", o_nqueries);
+				break;
+
+			case 'w': /* ARG */
+				o_timeout = checknumericarg();
+				debug("o_timeout set to %d\n", o_timeout);
+				break;
+
+			case 's': /* ARG */
+				if (getuid()) fatal("Sorry, must be root to use -s\n");
+				src = optarg;
+				break;
+
+			case 't': /* ARG */
+				o_tos = checknumericarg();
+				debug("o_tos set to %d\n", o_tos);
+				break;
+
+			case 'S':
+				o_syn = 1;
+				debug("o_syn set\n");
+				break;
+
+			case 'A':
+				o_ack = 1;
+				debug("o_ack set\n");
+				break;
+
+			case 'E':
+				o_ecn = 1;
+				debug("o_ecn set\n");
+				break;
+
+			case '?':
+			default:
+				if (optopt != ':' && strchr(optstring, optopt))
+					fatal("Argument required for -%c\n", optopt);
+				fprintf(stderr, "Unknown command line argument: -%c\n", optopt);
+				usage();
 		}
+
+	argc -= optind;
+	argv += optind;
+
+	switch(argc - 1)
+	{
+		case 2:
+			o_pktlen = atoi(argv[2]);
+
+		case 1:
+			if (isnumeric(argv[1]))
+			{
+				dst_prt = atoi(argv[1]);
+			}
+			else
+			{
+				struct servent *serv;
+
+				if ((serv = getservbyname(argv[1], "tcp")) == NULL)
+					fatal("Unknown port: %s\n", argv[1]);
+
+				dst_prt = ntohs(serv->s_port);
+			}
+
+		case 0:
+			dst = argv[0];
+			break;
+
+		default:
+			usage();
 	}
-
-	if (argc > 2)
-		o_pktlen = atoi(argv[2]);
-
-	if (dst_prt == 0)
-		dst_prt = 80;
 
 	if (getuid() & geteuid())
 		fatal("Got root?\n");
@@ -1855,7 +1964,5 @@ int main(int argc, char *argv[])
 	defaults();
 	initcapture();
 	seteuid(getuid());
-	trace();
-
-	return 0;
+	return trace();
 }
