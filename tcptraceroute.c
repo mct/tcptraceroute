@@ -30,26 +30,26 @@
  * Updates are available from http://michael.toren.net/code/tcptraceroute/
  */
 
-#define VERSION "tcptraceroute 1.3beta2 (2001-11-21)"
+#define VERSION "tcptraceroute 1.3beta3 (2001-12-01)"
 #define BANNER  "Copyright (c) 2001, Michael C. Toren <mct@toren.net>\n\
 Updates are available from http://michael.toren.net/code/tcptraceroute/\n"
 
 /*
  * Revision history:
  *
- *	Version 1.3beta2 (2001-11-21)
+ *	Version 1.3beta3 (2001-12-01)
  *
  *		probe() and capture() now use a new proberecord structure which
  *		contains information about each probe in a modularized way.
  *
- *		Added a new command line argument, --track-port, which causes
- *		each probe to have a unique source port so that something other
- *		than the IP ID can be used to track it.  Hopefully this will
- *		make things work on Solaris, which modifies the IP ID of packets
- *		written to a raw socket.  Also added a corresponding --track-id
- *		argument to specify the old behavior of tracking IP ID's, which
- *		is still the default.  If a source port is specified with -p,
- *		--track-id is implied.
+ *		Added a new command line argument, --track-port, which causes each
+ *		probe to have a unique source port so that something other than the
+ *		IP ID can be used to track it, and also a corresponding --track-id
+ *		argument to specify the old behavior of tracking IP ID's.  If a
+ *		source port is specified with -p, --track-id is implied.  The
+ *		compile-time default on Solaris is --track-port, enabling
+ *		tcptraceroute to work out-of-the-box, and --track-id on all other
+ *		platforms.
  *
  *		probe() now calls allocateid() to generate an IP ID, which
  *		caches the last ALLOCATEID_CACHE_SIZE allocations to prevent
@@ -557,6 +557,8 @@ void getinterfaces(void)
 	int salen;
 	char *x;
 
+	debug("entering getinterfaces()\n");
+
 	if (o_nogetinterfaces)
 	{
 		debug("Not fetching the interface list\n");
@@ -668,6 +670,7 @@ void getinterfaces(void)
 	}
 
 	free(ifc.ifc_buf);
+	debug("leaving getinterfaces()\n");
 }
 
 /*
@@ -716,12 +719,13 @@ char *finddev(u_long with_src)
 	struct interface_entry *p;
 	char *device = NULL;
 
+	debug("entering finddev()\n");
+
 	/* First, see if we're trying to trace to ourself */
 	for (p = interfaces; p; p = p->next)
 		if (p->addr == dst_ip)
 		{
-			debug("Destination address matches address of interface %s\n", p->name);
-			debug("Attempting to find loopback interface ...\n");
+			debug("Destination matches local address of interface %s;\n\tattempting to find loopback interface, o_nofilter set\n", p->name);
 			with_src = libnet_name_resolve("127.0.0.1", 0);
 			o_nofilter = 1;
 		}
@@ -730,7 +734,7 @@ char *finddev(u_long with_src)
 		if (p->addr == with_src)
 			device = p->name;
 	
-	debug("finddev returning %s\n", device);
+	debug("finddev() returning %s\n", device);
 	return device;
 }
 
@@ -769,7 +773,6 @@ u_short allocateport(u_short requested)
  */
 
 #define ALLOCATEID_CACHE_SIZE 90
-
 u_short allocateid(void)
 {
 	static u_short ids[ALLOCATEID_CACHE_SIZE];
@@ -885,6 +888,65 @@ void showprobe(proberecord *record)
 }
 
 /*
+ * Useful for debugging; dump #define's and command line options.
+ */
+
+void debugoptions(void)
+{
+	if (! o_debug)
+		return;
+
+	debug("debugoptions():\n");
+
+	/*
+	 * TEXTSIZE SNAPLEN IPTOSBUFFERS ALLOCATEID_CACHE_SIZE device datalink
+	 * datalinkname(datalink) datalinkoffset(datalink) o_minttl o_maxttl
+	 * o_timeout o_debug o_numeric o_pktlen o_nqueries o_dontfrag o_tos
+	 * o_forceport o_syn o_ack o_ecn o_nofilter o_nogetinterfaces o_trackport
+	 */
+
+	debug("%16s: %-2d %14s: %-2d %16s: %-2d\n",
+		"TEXTSIZE", TEXTSIZE,
+		"SNAPLEN", SNAPLEN,
+		"IPTOSBUFFERS", IPTOSBUFFERS);
+
+	debug("%16s: %-2d %16s: %-2d %16s: %-2d\n",
+		"ALLOCATEID_CACHE", ALLOCATEID_CACHE_SIZE,
+		"datalink", datalink,
+		"datalinkoffset", datalinkoffset(datalink));
+
+	debug("%16s: %-2d %16s: %-2d %16s: %-2d\n",
+		"o_minttl", o_minttl,
+		"o_maxttl", o_maxttl,
+		"o_timeout", o_timeout);
+
+	debug("%16s: %-2d %16s: %-2d %16s: %-2d\n",
+		"o_debug", o_debug,
+		"o_numeric", o_numeric,
+		"o_pktlen", o_pktlen);
+
+	debug("%16s: %-2d %16s: %-2d %16s: %-2d\n",
+		"o_nqueries", o_nqueries,
+		"o_dontfrag", o_dontfrag,
+		"o_tos", o_tos);
+
+	debug("%16s: %-2d %16s: %-2d %16s: %-2d\n",
+		"o_forceport", o_forceport,
+		"o_syn", o_syn,
+		"o_ack", o_ack);
+
+	debug("%16s: %-2d %16s: %d %16s: %-2d\n",
+		"o_ecn", o_ecn,
+		"o_nofilter", o_nofilter,
+		"o_nogetinterfaces", o_nogetinterfaces);
+
+	debug("%16s: %-2d %16s: %-12s %s: %s\n",
+		"o_trackport", o_trackport,
+		"datalinkname", datalinkname(datalink),
+		"device", device);
+}
+
+/*
  * Check command line arguments for sanity, and fill in the blanks.
  */
 
@@ -936,14 +998,18 @@ void defaults(void)
 
 	pcap_close(pcap);
 
-	if (src_prt)
+	if (src_prt && o_trackport)
 	{
+		warn("--track-id implied by specifying the local source port\n");
 		o_trackport = 0;
-		debug("Disabling o_trackport implied by specifying src_prt\n");
 	}
 
 	if (! o_trackport)
 	{
+#if defined (__SVR4) && defined (__sun)
+		warn("--track-id is unlikely to work on Solaris\n");
+#endif
+
 		if (! o_forceport)
 			src_prt = allocateport(src_prt);
 
@@ -993,6 +1059,8 @@ void defaults(void)
 		debug("Setting o_syn, in absence of either o_syn or o_ack\n");
 		o_syn = 1;
 	}
+
+	debugoptions();
 
 	fprintf(stderr, "Selected device %s, address %s", device, iptos(src_ip));
 	if (! o_trackport) fprintf(stderr, ", port %d", src_prt);
@@ -1567,7 +1635,12 @@ int main(int argc, char *argv[])
 	o_timeout = 3;
 	o_nofilter = 0;
 	o_nogetinterfaces = 0;
-	o_trackport = 0;
+
+#if defined (__SVR4) && defined (__sun)
+	o_trackport = 1; /* --track-port should be the default for Solaris */
+#else
+	o_trackport = 0; /* --track-id should be the default for everything else */
+#endif
 
 	/* strip out path from argv[0] */
 	for (name = s = argv[0]; s[0]; s++)
@@ -1641,7 +1714,7 @@ int main(int argc, char *argv[])
 
 				case 'd':
 					o_debug++;
-					debug("Debugging enabled, for what it's worth\n");
+					debug("%s\n", VERSION);
 					break;
 
 				case 'n':

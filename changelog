@@ -3,19 +3,19 @@ Extracted from tcptraceroute.c:
 /*
  * Revision history:
  *
- *  Version 1.3beta2 (2001-11-21)
+ *  Version 1.3beta3 (2001-12-01)
  *
  *      probe() and capture() now use a new proberecord structure which
  *      contains information about each probe in a modularized way.
  *
- *      Added a new command line argument, --track-port, which causes
- *      each probe to have a unique source port so that something other
- *      than the IP ID can be used to track it.  Hopefully this will
- *      make things work on Solaris, which modifies the IP ID of packets
- *      written to a raw socket.  Also added a corresponding --track-id
- *      argument to specify the old behavior of tracking IP ID's, which
- *      is still the default.  If a source port is specified with -p,
- *      --track-id is implied.
+ *      Added a new command line argument, --track-port, which causes each
+ *      probe to have a unique source port so that something other than the
+ *      IP ID can be used to track it, and also a corresponding --track-id
+ *      argument to specify the old behavior of tracking IP ID's.  If a
+ *      source port is specified with -p, --track-id is implied.  The
+ *      compile-time default on Solaris is --track-port, enabling
+ *      tcptraceroute to work out-of-the-box, and --track-id on all other
+ *      platforms.
  *
  *      probe() now calls allocateid() to generate an IP ID, which
  *      caches the last ALLOCATEID_CACHE_SIZE allocations to prevent
