@@ -3,7 +3,7 @@
 
 /*
  * tcptraceroute -- A traceroute implementation using TCP packets
- * Copyright (c) 2001, 2002  Michael C. Toren <mct@toren.net>
+ * Copyright (c) 2001, 2002, 2003  Michael C. Toren <mct@toren.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License, version 2, as published
@@ -22,161 +22,26 @@
 
 /*
  * Requires libnet (http://www.packetfactory.net/libnet) and libpcap
- * (http://www.tcpdump.org/).  To compile, try something like:
- *
- *	gcc -O2 -Wall `libnet-config --defines` \
- *		-o tcptraceroute tcptraceroute.c `libnet-config --libs` -lpcap
+ * (http://www.tcpdump.org/).
  *
  * Updates are available from http://michael.toren.net/code/tcptraceroute/
  */
 
-#define VERSION "tcptraceroute 1.4 (2002-07-30)"
-#define BANNER  "Copyright (c) 2001, 2002 Michael C. Toren <mct@toren.net>\n\
+#define BANNER  "Copyright (c) 2001, 2002, 2003 Michael C. Toren <mct@toren.net>\n\
 Updates are available from http://michael.toren.net/code/tcptraceroute/\n"
-
-/*
- * Revision history:
- *
- *	Version 1.4 (2002-07-30)
- *
- *		Added linklayer support for Linux ISDN Sync-PPP interfaces,
- *		by Dr. Peter Bieringer <pbieringer@aerasec.de>
- *
- *		Adds support back for DLT_RAW interfaces, which was inadvertently
- *		removed sometime between 1.2 and 1.3beta1, and as a result caused
- *		tcptraceroute to fail over PPP interfaces.  Reported in Debian
- *		Bug#154793 by David Harris <eelf@sympatico.ca>.
- *
- *	Version 1.3 (2002-05-19)
- *
- *		Now detects (and ignores) IP packets with IP options.
- *
- *		Packets are now properly aligned by allocating new space and
- *		copying the packet data there before casting packet header
- *		structs against them.
- *
- *		New, undocumented --no-select command line argument added to never
- *		call select(), which fails to indicate that a BPF socket is ready
- *		for reading on some BSD systems.
- *
- *		Now sets a non-zero exit code if the destination was not reached,
- *		as suggested by Arndt Schoenewald <arndt@schoenewald.de>
- *
- *		Fixes an off-by-one error in getinterfaces(), discovered by
- *		Kit Knox <kit@rootshell.com>.
- *
- *		probe() and capture() now use a new proberecord structure which
- *		contains information about each probe in a modularized way.
- *
- *		Added a new command line argument, --track-port, which causes each
- *		probe to have a unique source port so that something other than the
- *		IP ID can be used to track it, and also a corresponding --track-id
- *		argument to specify the old behavior of tracking IP ID's.  If a
- *		source port is specified with -p, --track-id is implied.  The
- *		compile-time default on Solaris is --track-port, enabling
- *		tcptraceroute to work out-of-the-box, and --track-id on all other
- *		platforms.
- *
- *		probe() now calls allocateid() to generate an IP ID, which
- *		caches the last ALLOCATEID_CACHE_SIZE allocations to prevent
- *		against duplicates.
- *
- *		Display "!<N>" instead of "!?" for unknown ICMP codes, as
- *		suggested by Kevin McAllister <kevin@mcallister.net>
- *
- *		Attempts to find virtual addresses under OpenBSD, based on a
- *		patch by Scott Gifford <sgifford@tir.com>
- *
- *		Moves the datalinkoffset and datalinkname information into a
- *		single data structure, which is much more logical, and less
- *		prone to error.
- *
- *		Improved command line argument handling a good deal, based
- *		on suggestions by Scott Fenton <scott@matts-books.com>.  First,
- *		a pass through is made to process and shift out long command
- *		line arguments, then the remaining command line is passed to
- *		getopt().
- *
- *		It is now possible to traceroute to yourself, by switching the
- *		device to the loopback interface if the destination matches the
- *		address of a local interface.  Additionally, as learned by
- *		looking through the nmap source, we now never set a libpcap
- *		filter on the loopback interface to avoid apparent libpcap bugs
- *		which previously made it impossible to traceroute to 127.0.0.1
- *
- *		Added -S and -A command line arguments to control the SYN
- *		and ACK flags in outgoing packets.  By using -A, it is now
- *		possible to traceroute through stateless firewalls which
- *		permit hosts behind the firewalls to establish outgoing TCP
- *		connections.  In the absence of either -A or -S, -S is set.
- *
- *		Added -N command line argument which takes the place of the
- *		previous RESOLVE_RFC1918 #define.
- *
- *		Now displays if the remote host is ECN capable when using -E
- *
- *	Version 1.2 (2001-07-31)
- *
- *		Contains large portions of code and ideas contributed by
- *		Scott Gifford <sgifford@tir.com>
- *
- *		Attempt to determine what outgoing interface to use based on
- *		the destination address and the local system's interface list.
- *		Could still use a good deal of work on BSD systems, though,
- *		especially when it comes to virtual addresses which reside on
- *		subnets different than the primary address.
- *		
- *		The timeout code has been reworked significantly, and should
- *		now be much more reliable.
- *		
- *		Added -E command line argument to send ECN (RFC2481) packets.
- *		Requested by Christophe Barb <christophe.barbe@lineo.fr> and
- *		Jim Penny <jpenny@debian.org>
- *
- *		Added -l command line argument to set the total packet length,
- *		including IP header.
- *		
- *		Added support for sending more than one probe to each hop, and
- *		the -q command line option to specify the number of probes.
- *		
- *		Added -F command line argument to set the IP_DF bit.
- *		
- *		Added -t command line argument to set the IP TOS.
- *		
- *		Now properly checks the length of the packets returned by libpcap
- *		before blindly assuming that the entire header structure we happen
- *		to be looking for is there.  This could have been very ugly had the
- *		snaplen not been set so conservatively.
- *		
- *		Print banner information to stderr, not stdout, to be compatible with
- *		traceroute(8).  Reported by Scott Fenton <scott@matts-books.com>
- *
- *		Fixed an endian bug reported by Zoran Dzelajlija <jelly@srk.fer.hr>,
- *		which prevented users from specifying the destination port number by
- *		name.
- *
- *	Version 1.1 (2001-06-30)
- *
- *		Now drops root privileges after sockets have been opened.
- *
- *		Must now be root to use -s or -p, making it now safe to to install
- *		tcptraceroute suid root, without fear that users can generate arbitrary
- *		SYN packets.
- *
- *	Version 1.0 (2001-04-10)
- *
- *		Initial Release.
- */
 
 /*
  * TODO:
  *
- * - We really should be using GNU autoconf.
  * - Command line argument handling could be improved.  Currently,
  *   long options are always processed before short options, which
  *   means that debugging will always be disabled when long options
  *   are processed.
  */
+
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -209,10 +74,6 @@ Updates are available from http://michael.toren.net/code/tcptraceroute/\n"
 #define AF_LINK AF_INET /* BSD defines some AF_INET network interfaces as AF_LINK */
 #endif
 
-#if defined (__OpenBSD__) || defined(__FreeBSD__) || defined(__bsdi__)
-#define HASSALEN /* Awful, awful hack to make subinterfaces work on BSD. */
-#endif
-
 /* ECN (RFC2481) */
 #ifndef TH_ECN
 #define TH_ECN  0x40
@@ -224,6 +85,25 @@ Updates are available from http://michael.toren.net/code/tcptraceroute/\n"
 /* Buffer size used for a few strings, including the pcap filter */
 #define TEXTSIZE	1024
 
+/* For compatability with older versions of libnet */
+#if (LIBNET_API_VERSION < 110)
+#define LIBNET_IPV4_H		LIBNET_IP_H
+#define LIBNET_ICMPV4_H		LIBNET_ICMP_H
+#define LIBNET_DONT_RESOLVE	0
+#define LIBNET_RESOLVE		1
+#define libnet_addr2name4	libnet_host_lookup
+#define libnet_ipv4_hdr		libnet_ip_hdr
+#define libnet_icmpv4_hdr	libnet_icmp_hdr
+#endif
+
+#ifndef LIBNET_VERSION
+#define LIBNET_VERSION "UNKNOWN"
+#endif
+
+#ifndef LIBNET_ERRBUF_SIZE
+#define LIBNET_ERRBUF_SIZE TEXTSIZE
+#endif
+
 /*
  * How many bytes should we examine on every packet that comes off the
  * wire?  This doesn't include the link layer which is accounted for
@@ -232,8 +112,8 @@ Updates are available from http://michael.toren.net/code/tcptraceroute/\n"
  * there's a *2 there.  The +32 is just to be safe.
  */
 
-#define SNAPLEN	 (LIBNET_IP_H * 2 + \
-	(LIBNET_TCP_H > LIBNET_ICMP_H ? LIBNET_TCP_H : LIBNET_ICMP_H) + 32)
+#define SNAPLEN	 (LIBNET_IPV4_H * 2 + \
+	(LIBNET_TCP_H > LIBNET_ICMPV4_H ? LIBNET_TCP_H : LIBNET_ICMPV4_H) + 32)
 
 /*
  * To add support for additional link layers, add entries to the following
@@ -280,6 +160,9 @@ struct datalinktype {
 #ifdef DLT_LOOP
 	{	DLT_LOOP,			4,		"DLT_LOOP"		},
 #endif
+#ifdef DLT_PPP_ETHER
+	{	DLT_PPP_ETHER,		12,		"PPP_ETHER"		},
+#endif
 
 	/* Does anyone know correct values for these? */
 #ifdef DLT_ATM_RFC1483
@@ -310,14 +193,22 @@ u_long dst_ip, src_ip;
 u_short src_prt, dst_prt;
 char *device, *name, *dst, *src;
 char dst_name[TEXTSIZE], dst_prt_name[TEXTSIZE], filter[TEXTSIZE];
-char errbuf[PCAP_ERRBUF_SIZE];
 pcap_t *pcap;
 int pcap_fd;
-struct timeval now;
-int	sockfd, datalink, offset;
+int datalink, offset;
 int o_minttl, o_maxttl, o_timeout, o_debug, o_numeric, o_pktlen,
 	o_nqueries, o_dontfrag, o_tos, o_forceport, o_syn, o_ack, o_ecn,
 	o_nofilter, o_nogetinterfaces, o_noselect, o_trackport;
+
+char errbuf [PCAP_ERRBUF_SIZE > LIBNET_ERRBUF_SIZE ?
+			 PCAP_ERRBUF_SIZE : LIBNET_ERRBUF_SIZE];
+
+#if (LIBNET_API_VERSION < 110)
+	int sockfd;
+#else
+	libnet_t *libnet_context;
+#endif
+
 
 /* interface linked list, built later by getinterfaces() */
 struct interface_entry {
@@ -390,16 +281,13 @@ void pfatal(char *err)
 
 void usage(void)
 {
-	printf("\n%s\n%s\n", VERSION, BANNER);
-    fatal("Usage: %s [-nNFSAE] [-i <interface>] [-f <first ttl>]
-       [-l <packet length>] [-q <number of queries>] [-t <tos>]
-       [-m <max ttl>] [-pP] <source port>] [-s <source address>]
-       [-w <wait time>] <host> [destination port] [packet length]\n\n", name);
+	printf("\ntcptraceroute %s\n%s\n", VERSION, BANNER);
+    fatal("Usage: %s [-nNFSAE] [-i <interface>] [-f <first ttl>]\n       [-l <packet length>] [-q <number of queries>] [-t <tos>]\n       [-m <max ttl>] [-pP] <source port>] [-s <source address>]\n       [-w <wait time>] <host> [destination port] [packet length]\n\n", name);
 }
 
 void about(void)
 {
-	printf("\n%s\n%s\n", VERSION, BANNER);
+	printf("\ntcptraceroute %s\n%s\n", VERSION, BANNER);
 	exit(0);
 }
 
@@ -428,7 +316,7 @@ void *xrealloc(void *oldp, int size)
  * Same as strncpy and snprintf, but always be sure the result is terminated.
  */
 
-char *safe_strncpy(char *dst, const char *src, int size)
+char *safe_strncpy(char *dst, char *src, int size)
 {
 	dst[size-1] = '\0';
 	return strncpy(dst, src, size-1);
@@ -576,7 +464,7 @@ char *iptos(u_long in)
 }
 
 /*
- * A wrapper for libnet_host_lookup(), with the option not to resolve
+ * A wrapper for libnet_addr2name4(), with the option not to resolve
  * RFC1918 space.
  */
 
@@ -593,8 +481,21 @@ char *iptohost(u_long in)
 		return iptos(in);
 	}
 
-	return libnet_host_lookup(in, o_numeric > 0 ? 0 : 1);
+	return libnet_addr2name4(in,
+		o_numeric > 0 ? LIBNET_DONT_RESOLVE : LIBNET_RESOLVE);
 }
+
+/*
+ * A generic wrapper for libnet_name_resolve and libnet_name2addr4, because
+ * it's annoying to have #ifdef's all over the place to support both versions
+ * of libnet.
+ */
+
+#if (LIBNET_API_VERSION < 110)
+#define hosttoip(hostname, numeric) libnet_name_resolve(hostname, numeric)
+#else
+#define hosttoip(hostname, numeric) libnet_name2addr4(libnet_context, hostname, numeric)
+#endif
 
 /*
  * Allocates memory for a new proberecord structure.
@@ -684,8 +585,8 @@ void getinterfaces(void)
 
 	debug("Successfully retrieved interface list\n");
 
-#ifdef HASSALEN
-	debug("Using HASALEN method for finding addresses.\n");
+#ifdef HAVE_SOCKADDR_SA_LEN
+	debug("Using HAVE_SOCKADDR_SA_LEN method for finding addresses.\n");
 #endif
 
 	for (x = ifc.ifc_buf; x < (ifc.ifc_buf + ifc.ifc_len); x += salen)
@@ -695,7 +596,7 @@ void getinterfaces(void)
 		memset(&ifr, 0, sizeof(struct ifreq));
 		strcpy(ifr.ifr_name, ifrp->ifr_name);
 
-#ifdef HASSALEN
+#ifdef HAVE_SOCKADDR_SA_LEN
 
 		salen = sizeof(ifrp->ifr_name) + ifrp->ifr_addr.sa_len;
 		if (salen < sizeof(*ifrp))
@@ -705,7 +606,7 @@ void getinterfaces(void)
 		if (ioctl(s, SIOCGIFFLAGS, &ifr) < 0)
 			pfatal("ioctl(SIOCGIFFLAGS)");
 
-#else  /* HASALEN */
+#else  /* HAVE_SOCKADDR_SA_LEN */
 
 		salen = sizeof(*ifrp);
 
@@ -713,7 +614,7 @@ void getinterfaces(void)
 			pfatal("ioctl(SIOCGIFADDR)");
 		addr = ((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr.s_addr;
 
-#endif /* HASSALEN else */
+#endif /* HAVE_SOCKADDR_SA_LEN else */
 
 #ifdef AF_INET6
 		if (ifrp->ifr_addr.sa_family == AF_INET6)
@@ -820,7 +721,7 @@ char *finddev(u_long with_src)
 		if (p->addr == dst_ip)
 		{
 			debug("Destination matches local address of interface %s;\n\tattempting to find loopback interface, o_nofilter set\n", p->name);
-			with_src = libnet_name_resolve("127.0.0.1", 0);
+			with_src = hosttoip("127.0.0.1", LIBNET_DONT_RESOLVE);
 			o_nofilter = 1;
 		}
 
@@ -882,9 +783,9 @@ u_short allocateid(void)
 
 		for(i = 0; i < ALLOCATEID_CACHE_SIZE; i++)
 		{
-			for(ids[i] = libnet_get_prand(PRu16), j = i + 1; j < ALLOCATEID_CACHE_SIZE + i; j++)
+			for(ids[i] = libnet_get_prand(LIBNET_PRu16), j = i + 1; j < ALLOCATEID_CACHE_SIZE + i; j++)
 				if (ids[i] == ids[j % ALLOCATEID_CACHE_SIZE])
-					ids[i] = libnet_get_prand(PRu16), j = i + 1;
+					ids[i] = libnet_get_prand(LIBNET_PRu16), j = i + 1;
 		}
 	}
 
@@ -1057,14 +958,14 @@ void defaults(void)
 
 	getinterfaces();
 
-	if ((dst_ip = libnet_name_resolve(dst, 1)) == 0xFFFFFFFF)
+	if ((dst_ip = hosttoip(dst, LIBNET_RESOLVE)) == 0xFFFFFFFF)
 		fatal("Bad destination address: %s\n", dst);
 
 	recommended_src = findsrc(dst_ip);
 
 	if (src)
 	{
-		if ((src_ip = libnet_name_resolve(src, 1)) == 0xFFFFFFFF)
+		if ((src_ip = hosttoip(src, LIBNET_RESOLVE)) == 0xFFFFFFFF)
 			fatal("Bad source address: %s\n", src);
 	}
 	else
@@ -1106,7 +1007,7 @@ void defaults(void)
 
 	if (! o_trackport)
 	{
-#if defined (__SVR4) && defined (__sun)
+#ifdef HAVE_SOLARIS
 		warn("--track-id is unlikely to work on Solaris\n");
 #endif
 
@@ -1133,19 +1034,25 @@ void defaults(void)
 	if (o_timeout <= 0)
 		fatal("Timeout must be at least 1\n");
 
-	if (o_pktlen < LIBNET_TCP_H + LIBNET_IP_H)
+	if (o_pktlen < LIBNET_TCP_H + LIBNET_IPV4_H)
 	{
 		if (o_pktlen != 0)
-			warn("Increasing packet length to %d bytes\n", LIBNET_TCP_H + LIBNET_IP_H);
+			warn("Increasing packet length to %d bytes\n", LIBNET_TCP_H + LIBNET_IPV4_H);
 		o_pktlen = 0;
 	}
 	else
-		o_pktlen -= (LIBNET_TCP_H + LIBNET_IP_H);
+		o_pktlen -= (LIBNET_TCP_H + LIBNET_IPV4_H);
 
-	libnet_seed_prand();
-
+#if (LIBNET_API_VERSION < 110)
 	if ((sockfd = libnet_open_raw_sock(IPPROTO_RAW)) < 0)
 		pfatal("socket allocation");
+#endif
+
+#if (LIBNET_API_VERSION < 110)
+	libnet_seed_prand();
+#else
+	libnet_seed_prand(libnet_context);
+#endif
 
 	if (strcmp(dst, iptos(dst_ip)) == 0)
 		safe_snprintf(dst_name, TEXTSIZE, "%s", dst);
@@ -1171,6 +1078,22 @@ void defaults(void)
 }
 
 /*
+ * Initialize the libnet library context.
+ */
+
+void initlibnet()
+{
+#if (LIBNET_API_VERSION >= 110)
+	libnet_context = libnet_init(LIBNET_RAW4, NULL, errbuf);
+	if (libnet_context == NULL)
+		fatal("libnet_init() failed: %s\n", errbuf);
+#else
+	/* Nothing to do for libnet-1.0 */
+#endif
+	return;
+}
+
+/*
  * Open the pcap listening device, and apply our filter.
  */
 
@@ -1182,9 +1105,7 @@ void initcapture(void)
 	if (! (pcap = pcap_open_live(device, offset + SNAPLEN, 0, 10, errbuf)))
 		fatal("pcap_open_live failed: %s", errbuf);
 
-	safe_snprintf(filter, TEXTSIZE, "
-		(tcp and src host %s and src port %d and dst host %s)
-		or ((icmp[0] == 11 or icmp[0] == 3) and dst host %s)",
+	safe_snprintf(filter, TEXTSIZE, "\n		(tcp and src host %s and src port %d and dst host %s)\n		or ((icmp[0] == 11 or icmp[0] == 3) and dst host %s)",
 			iptos(dst_ip), dst_prt, iptos(src_ip), iptos(src_ip));
 
 	if (o_nofilter)
@@ -1218,19 +1139,27 @@ void initcapture(void)
 
 void probe(proberecord *record, int ttl, int q)
 {
-	static u_char *payload, *buf;
+	static u_char *payload;
 	int i, size, ret;
 
-	/* Initialize the packet buffer */
-	size = LIBNET_IP_H + LIBNET_TCP_H + o_pktlen;
+#if (LIBNET_API_VERSION < 110)
+	static u_char *buf;
+#else
+	static libnet_ptag_t ip_tag, tcp_tag, data_tag;
+#endif
 
+	size = LIBNET_IPV4_H + LIBNET_TCP_H + o_pktlen;
+
+#if (LIBNET_API_VERSION < 110)
 	if (!buf)
 	{
 		debug("Initializing packet buffer of %d bytes\n", size);
 		buf = xrealloc(buf, size);
 	}
 
-	memset(buf, 0, size);
+	else
+		memset(buf, 0, size);
+#endif
 
 	/* Initialize the packet payload */
 	if (o_pktlen && !payload)
@@ -1241,15 +1170,10 @@ void probe(proberecord *record, int ttl, int q)
 		for(i = 0; i < o_pktlen; i++)
 			payload[i] = i % ('~' - '!') + '!';
 
-			/*
-			 * TODO: Should the byte pattern we use to pad out the
-			 * packet be a command line argument?  Does anyone care?
-			 * Would it just be feature bloat?
-			 */
-
 		debug("Payload: %s\n", sprintable(payload));
 	}
 
+	/* Set some values of the probe record */
 	record->q = q;
 	record->ttl = ttl;
 	record->addr = INADDR_ANY;
@@ -1267,7 +1191,9 @@ void probe(proberecord *record, int ttl, int q)
 	if (gettimeofday(&(record->timestamp), NULL) < 0)
 		pfatal("gettimeofday");
 
-	/* Build the packet, and send it off into the cold, cruel world ... */
+	/* Build the packet, and send it off into the cold, cruel world */
+
+#if (LIBNET_API_VERSION < 110)
 	libnet_build_ip(
 		LIBNET_TCP_H+o_pktlen,	/* len			*/
 		o_tos,					/* tos			*/
@@ -1295,14 +1221,71 @@ void probe(proberecord *record, int ttl, int q)
 		0,						/* urgent?		*/
 		payload,				/* data			*/
 		o_pktlen,				/* datasize		*/
-		buf + LIBNET_IP_H);		/* buffer		*/
+		buf + LIBNET_IPV4_H);	/* buffer		*/
 
 	libnet_do_checksum(buf, IPPROTO_TCP, LIBNET_TCP_H + o_pktlen);
 
+	/* Write */
 	if ((ret = libnet_write_ip(sockfd, buf, size)) < size)
 		fatal("libnet_write_ip failed?  Attempted to write %d bytes, only wrote %d\n",
 			  size, ret);
+#else
+
+	/* Add the payload */
+	data_tag = libnet_build_data(payload, o_pktlen, libnet_context, data_tag);
+
+	if (data_tag < 0)
+		fatal("Can't add payload: %s\n", libnet_geterror(libnet_context));
+
+	/* Add the TCP header */
+	tcp_tag = libnet_build_tcp(
+		record->src_prt,		     /* source port	        */
+		dst_prt,				     /* dest port	        */
+		0,						     /* seq number	        */
+		0,						     /* ack number	        */
+		
+		(o_syn ? TH_SYN : 0) |
+		(o_ack ? TH_ACK : 0) |
+		(o_ecn ? TH_CWR|TH_ECN : 0), /* control	            */
+
+		0,						     /* window		        */
+		0,                           /* checksum TBD        */
+		0,						     /* urgent?	            */
+		LIBNET_TCP_H + o_pktlen,     /* TCP PDU size        */
+		NULL,				         /* data		        */
+		0,	          			     /* datasize	        */
+		libnet_context,              /* libnet context      */
+		tcp_tag);                    /* libnet protocol tag */
+
+	if (tcp_tag < 0)
+		fatal("Can't build TCP header: %s\n", libnet_geterror(libnet_context));
+
+	/* Add the IP header */
+	ip_tag = libnet_build_ipv4(
+		size,	                /* total packet len	   */
+		o_tos,					/* tos			       */
+		record->id,				/* id			       */
+		o_dontfrag ? IP_DF : 0,	/* frag			       */
+		ttl,					/* ttl			       */
+		IPPROTO_TCP,			/* proto		       */
+		0,                      /* checksum TBD        */
+		src_ip,					/* saddr		       */
+		dst_ip,					/* daddr		       */
+		NULL,    				/* data			       */
+		0,      				/* datasize?	       */
+		libnet_context,         /* libnet context      */
+		ip_tag);                /* libnet protocol tag */
+
+	if (ip_tag < 0)
+		fatal("Can't build IP header: %s\n", libnet_geterror(libnet_context));
+	
+	/* Write */
+	if ((ret = libnet_write(libnet_context)) < size)
+		fatal("libnet_write failed?  Attempted to write %d bytes, only wrote %d\n",
+			  size, ret);
+#endif
 }
+
 
 /*
  * Horrible macro kludge, to be called only from capture(), for architectures
@@ -1329,7 +1312,7 @@ int capture(proberecord *record)
 {
 	u_char *packet;
 	struct pcap_pkthdr packet_hdr;
-	struct libnet_ip_hdr *ip_hdr;
+	struct libnet_ipv4_hdr *ip_hdr;
 	struct timeval start, now, timepassed, timeout_tv, timeleft;
 	int firstpass, ret, len;
 	double delta;
@@ -1409,7 +1392,7 @@ int capture(proberecord *record)
 
 		debug("received %d byte IP packet from pcap_next()\n", len);
 
-		if (len < LIBNET_IP_H)
+		if (len < LIBNET_IPV4_H)
 		{
 			debug("Ignoring partial IP packet\n");
 			continue;
@@ -1421,7 +1404,7 @@ int capture(proberecord *record)
 			continue;
 		}
 
-		ALIGN_PACKET(ip_hdr, libnet_ip_hdr, 0);
+		ALIGN_PACKET(ip_hdr, libnet_ipv4_hdr, 0);
 
 		if (ip_hdr->ip_v != 4)
 		{
@@ -1442,25 +1425,22 @@ int capture(proberecord *record)
 			continue;
 		}
 
-		if (gettimeofday(&now, NULL) < 0)
-			pfatal("gettimeofday");
-
-		delta = (double)(now.tv_sec - record->timestamp.tv_sec) * 1000 +
-			(double)(now.tv_usec - record->timestamp.tv_usec) / 1000;
+		delta = (double)(packet_hdr.ts.tv_sec - record->timestamp.tv_sec) * 1000 +
+			(double)(packet_hdr.ts.tv_usec - record->timestamp.tv_usec) / 1000;
 
 		if (ip_hdr->ip_p == IPPROTO_ICMP)
 		{
-			struct libnet_icmp_hdr *icmp_hdr;
-			struct libnet_ip_hdr *old_ip_hdr;
+			struct libnet_icmpv4_hdr *icmp_hdr;
+			struct libnet_ipv4_hdr *old_ip_hdr;
 			struct libnet_tcp_hdr *old_tcp_hdr;
 
-			if (len < LIBNET_IP_H + LIBNET_ICMP_H + 4)
+			if (len < LIBNET_IPV4_H + LIBNET_ICMPV4_H + 4)
 			{
 				debug("Ignoring partial icmp packet\n");
 				continue;
 			}
 
-			ALIGN_PACKET(icmp_hdr, libnet_icmp_hdr, 0 + LIBNET_IP_H);
+			ALIGN_PACKET(icmp_hdr, libnet_icmpv4_hdr, 0 + LIBNET_IPV4_H);
 			debug("Received icmp packet\n");
 
 			/*
@@ -1469,14 +1449,14 @@ int capture(proberecord *record)
 			 * padding.
 			 */
 
-			if (len < LIBNET_IP_H + LIBNET_ICMP_H + 4 + LIBNET_IP_H + 8)
+			if (len < LIBNET_IPV4_H + LIBNET_ICMPV4_H + 4 + LIBNET_IPV4_H + 8)
 			{
 				debug("Ignoring icmp packet with incomplete payload\n");
 				continue;
 			}
 
-			ALIGN_PACKET(old_ip_hdr, libnet_ip_hdr,
-				0 + LIBNET_IP_H + LIBNET_ICMP_H + 4);
+			ALIGN_PACKET(old_ip_hdr, libnet_ipv4_hdr,
+				0 + LIBNET_IPV4_H + LIBNET_ICMPV4_H + 4);
 
 			/*
 			 * The entire TCP header isn't here, but the source port,
@@ -1484,7 +1464,7 @@ int capture(proberecord *record)
 			 */
 
 			ALIGN_PACKET(old_tcp_hdr, libnet_tcp_hdr,
-				0 + LIBNET_IP_H + LIBNET_ICMP_H + 4 + LIBNET_IP_H);
+				0 + LIBNET_IPV4_H + LIBNET_ICMPV4_H + 4 + LIBNET_IPV4_H);
 
 			if (old_ip_hdr->ip_v != 4)
 			{
@@ -1619,13 +1599,13 @@ int capture(proberecord *record)
 				continue;
 			}
 
-			if (len < LIBNET_IP_H + LIBNET_TCP_H)
+			if (len < LIBNET_IPV4_H + LIBNET_TCP_H)
 			{
 				debug("Ignoring partial tcp packet\n");
 				continue;
 			}
 
-			ALIGN_PACKET(tcp_hdr, libnet_tcp_hdr, 0 + LIBNET_IP_H);
+			ALIGN_PACKET(tcp_hdr, libnet_tcp_hdr, 0 + LIBNET_IPV4_H);
 
 			debug("Received tcp packet %s:%d -> %s:%d, flags %s%s%s%s%s%s%s%s%s\n",
 				iptos(ip_hdr->ip_src.s_addr), ntohs(tcp_hdr->th_sport),
@@ -1690,7 +1670,7 @@ int trace(void)
 	fprintf(stderr, "Tracing the path to %s on TCP port %s, %d hops max",
 		dst_name, dst_prt_name, o_maxttl);
 	if (o_pktlen)
-		fprintf(stderr, ", %d byte packets", o_pktlen + LIBNET_TCP_H + LIBNET_IP_H);
+		fprintf(stderr, ", %d byte packets", o_pktlen + LIBNET_TCP_H + LIBNET_IPV4_H);
 	fprintf(stderr, "\n");
 
 	for (ttl = o_minttl, done = 0; !done && ttl <= o_maxttl; ttl++)
@@ -1760,11 +1740,11 @@ int checklong_real(char *word, int *i, int *argc, char ***argv)
 int main(int argc, char **argv)
 {
 	char *optstring, *s;
-	int op, i;
+	int op, i, exitcode;
 
 	src_ip	= 0;
 	src_prt = 0;
-	dst_prt	= 80;
+	dst_prt	= DEFAULT_PORT;
 	src		= NULL;
 	device	= NULL;
 	interfaces = NULL;
@@ -1786,10 +1766,10 @@ int main(int argc, char **argv)
 	o_noselect = 0;
 	o_nogetinterfaces = 0;
 
-#if defined (__SVR4) && defined (__sun)
-	o_trackport = 1; /* --track-port should be the default for Solaris */
+#ifdef TRACK_PORT_DEFAULT
+	o_trackport = 1;
 #else
-	o_trackport = 0; /* --track-id should be the default for everything else */
+	o_trackport = 0;
 #endif
 
 	/* strip out path from argv[0] */
@@ -1828,6 +1808,14 @@ int main(int argc, char **argv)
 		{
 			o_noselect = 1;
 			debug("o_noselect set\n");
+			continue;
+		}
+
+		/* undocumented, for debugging only */
+		if (CHECKLONG("--select"))
+		{
+			o_noselect = 0;
+			debug("o_noselect disabled\n");
 			continue;
 		}
 
@@ -1872,13 +1860,9 @@ int main(int argc, char **argv)
 
 			case 'd':
 				o_debug++;
-				debug("%s\n", VERSION);
-#ifdef LIBNET_VERSION
-				debug("Compiled with libpcap version %s, libnet version %s\n",
-					pcap_version, LIBNET_VERSION);
-#else
-				debug("Compiled with libpcap version %s\n", pcap_version);
-#endif
+				debug("tcptraceroute %s\n", VERSION);
+				debug("Compiled with libpcap %s, libnet %s (API %d)\n",
+					pcap_version, LIBNET_VERSION, LIBNET_API_VERSION);
 				break;
 
 			case 'n':
@@ -2001,8 +1985,13 @@ int main(int argc, char **argv)
 	if (getuid() & geteuid())
 		fatal("Got root?\n");
 
+	initlibnet();
 	defaults();
 	initcapture();
 	seteuid(getuid());
-	return trace();
+	exitcode = trace();
+#if (LIBNET_API_VERSION >= 110)
+	libnet_destroy(libnet_context);
+#endif
+	return exitcode;
 }
