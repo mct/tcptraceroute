@@ -27,6 +27,9 @@
 /* Define to 1 if you have the `socket' library (-lsocket). */
 #undef HAVE_LIBSOCKET
 
+/* Is this a MacOS X system? */
+#undef HAVE_MACOSX
+
 /* Define to 1 if your system has a GNU libc compatible `malloc' function, and
    to 0 otherwise. */
 #undef HAVE_MALLOC
@@ -97,6 +100,9 @@
 
 /* libnet API version */
 #undef LIBNET_API_VERSION
+
+/* Use select(2) by default? */
+#undef NOSELECT_DEFAULT
 
 /* Name of package */
 #undef PACKAGE

@@ -281,13 +281,13 @@ void pfatal(char *err)
 
 void usage(void)
 {
-	printf("\ntcptraceroute %s\n%s\n", VERSION, BANNER);
+	printf("\n%s %s\n%s\n", PACKAGE, VERSION, BANNER);
     fatal("Usage: %s [-nNFSAE] [-i <interface>] [-f <first ttl>]\n       [-l <packet length>] [-q <number of queries>] [-t <tos>]\n       [-m <max ttl>] [-pP] <source port>] [-s <source address>]\n       [-w <wait time>] <host> [destination port] [packet length]\n\n", name);
 }
 
 void about(void)
 {
-	printf("\ntcptraceroute %s\n%s\n", VERSION, BANNER);
+	printf("\n%s %s\n%s\n", PACKAGE, VERSION, BANNER);
 	exit(0);
 }
 
@@ -1763,8 +1763,13 @@ int main(int argc, char **argv)
 	o_dontfrag = 0;
 	o_timeout = 3;
 	o_nofilter = 0;
-	o_noselect = 0;
 	o_nogetinterfaces = 0;
+
+#ifdef NOSELECT_DEFAULT
+	o_noselect = 1;
+#else
+	o_noselect = 0;
+#endif
 
 #ifdef TRACK_PORT_DEFAULT
 	o_trackport = 1;
@@ -1860,7 +1865,7 @@ int main(int argc, char **argv)
 
 			case 'd':
 				o_debug++;
-				debug("tcptraceroute %s\n", VERSION);
+				debug("%s %s\n", PACKAGE, VERSION);
 				debug("Compiled with libpcap %s, libnet %s (API %d)\n",
 					pcap_version, LIBNET_VERSION, LIBNET_API_VERSION);
 				break;

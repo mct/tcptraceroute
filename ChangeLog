@@ -1,25 +1,34 @@
+Version 1.5beta2 (2003-05-25)
+
+    Added an autoconf check to detect MacOS X systems by looking to
+    see if __APPLE__ and __MACH__ are defined.  Also added an autoconf
+    configure command line argument --enable-noselect-default to control
+    the default behavior of the tcptraceroute --noselect command line
+    argument, and enabled it by default on MacOS X systems if not
+    otherwise specified.
+
 Version 1.5beta1 (2003-05-24)
 
-	Most substantially, support for both autoconf and libnet-1.1.x
-	has been added, based on patches from (in alphabetical order):
+    Most substantially, support for both autoconf and libnet-1.1.x
+    has been added, based on patches from (in alphabetical order):
 
-		jbash@velvet.com
-		Jon Allen Boone <ipmonger@delamancha.org>
-		James Ralston <qralston@andrew.cmu.edu>
-		Darren Tucker <dtucker@zip.com.au>
-		Matt Weidner <mattweidner@webmail.co.za>
-	
-	Added linklayer support for PPPoE interfaces, by Darren Tucker
-	<dtucker@zip.com.au>.
+        jbash@velvet.com
+        Jon Allen Boone <ipmonger@delamancha.org>
+        James Ralston <qralston@andrew.cmu.edu>
+        Darren Tucker <dtucker@zip.com.au>
+        Matt Weidner <mattweidner@webmail.co.za>
+    
+    Added linklayer support for PPPoE interfaces, by Darren Tucker
+    <dtucker@zip.com.au>.
 
-	Improved the round trip time calculations, by Amgad Zeitoun
-	<azeitoun@eecs.umich.edu>.
+    Improved the round trip time calculations, by Amgad Zeitoun
+    <azeitoun@eecs.umich.edu>.
 
-	Removed a number of multi-line strings, which apparently causes
-	trouble for some compilers, based on patches from:
+    Removed a number of multi-line strings, which apparently causes
+    trouble for some compilers, based on patches from:
 
-		Richard van den Berg <richard@vdberg.org>
-		Petter Reinholdtsen <pere@hungry.com>
+        Richard van den Berg <richard@vdberg.org>
+        Petter Reinholdtsen <pere@hungry.com>
 
 Version 1.4 (2002-07-30)
 

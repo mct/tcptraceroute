@@ -87,7 +87,7 @@ AC_COMPILE_IFELSE(
 		[ unsigned int i = sizeof(((struct sockaddr *)0)->sa_len) ])],
 	[
 		AC_MSG_RESULT(yes)
-		AC_DEFINE([HAVE_SOCKADDR_SA_LEN], [], [Has socket.sa_len])
+		AC_DEFINE([HAVE_SOCKADDR_SA_LEN], 1, [Has socket.sa_len])
 	], [
 		AC_MSG_RESULT(no)
 	])
@@ -116,11 +116,44 @@ AC_RUN_IFELSE([AC_LANG_PROGRAM( [], [
 		])
 	],[
 		AC_MSG_RESULT(yes)
-		AC_DEFINE([HAVE_SOLARIS], [], [Is this a Solaris system?])
+		AC_DEFINE([HAVE_SOLARIS], 1, [Is this a Solaris system?])
 		HAVE_SOLARIS=yes
 	],[
 		AC_MSG_RESULT(no)
 	])
+
+# Is this MacOS X?
+AC_MSG_CHECKING(for MacOS X)
+AC_RUN_IFELSE([AC_LANG_PROGRAM( [], [
+#if defined (__APPLE__) && defined (__MACH__)
+	exit(0);
+#else
+	exit(-1);
+#endif
+		])
+	],[
+		AC_MSG_RESULT(yes)
+		AC_DEFINE([HAVE_MACOSX], 1, [Is this a MacOS X system?])
+		HAVE_MACOSX=yes
+	],[
+		AC_MSG_RESULT(no)
+	])
+
+# Handle --enable-noselect-default
+AC_ARG_ENABLE(noselect-default,
+	AC_HELP_STRING([--enable-noselect-default], [default to not using select(2)]),
+	[
+		NOSELECT_DEFAULT=$enable_noselect_default
+	], [
+		if test "$HAVE_MACOSX" = "yes"; then
+			NOSELECT_DEFAULT=yes
+		else
+			NOSELECT_DEFAULT=no
+		fi
+	])
+if test "$NOSELECT_DEFAULT" = "yes"; then
+	AC_DEFINE(NOSELECT_DEFAULT, 1, [Use select(2) by default?])
+fi
 
 # Handle --enable-track-default=IP|PORT
 AC_ARG_ENABLE(track-default,
@@ -141,9 +174,9 @@ AC_ARG_ENABLE(track-default,
 		fi
 	])
 if test "$TRACK_DEFAULT" = "port"; then
-	AC_DEFINE(TRACK_PORT_DEFAULT, [], [Track ports by default])
+	AC_DEFINE(TRACK_PORT_DEFAULT, 1, [Track ports by default])
 else
-	AC_DEFINE(TRACK_ID_DEFAULT, [], [Track IP IDs by default])
+	AC_DEFINE(TRACK_ID_DEFAULT, 1, [Track IP IDs by default])
 fi
 
 # Handle --enable-default-port=N
