@@ -3,7 +3,23 @@ Extracted from tcptraceroute.c:
 /*
  * Revision history:
  *
- *  Version 1.3beta1 (2001-08-14)
+ *  Version 1.3beta2 (2001-11-21)
+ *
+ *      probe() and capture() now use a new proberecord structure which
+ *      contains information about each probe in a modularized way.
+ *
+ *      Added a new command line argument, --track-port, which causes
+ *      each probe to have a unique source port so that something other
+ *      than the IP ID can be used to track it.  Hopefully this will
+ *      make things work on Solaris, which modifies the IP ID of packets
+ *      written to a raw socket.  Also added a corresponding --track-id
+ *      argument to specify the old behavior of tracking IP ID's, which
+ *      is still the default.  If a source port is specified with -p,
+ *      --track-id is implied.
+ *
+ *      probe() now calls allocateid() to generate an IP ID, which
+ *      caches the last ALLOCATEID_CACHE_SIZE allocations to prevent
+ *      against duplicates.
  *
  *      Display "!<N>" instead of "!?" for unknown ICMP codes, as
  *      suggested by Kevin McAllister <kevin@mcallister.net>
@@ -26,9 +42,9 @@ Extracted from tcptraceroute.c:
  *      filter on the loopback interface to avoid apparent libpcap bugs
  *      which previously made it impossible to traceroute to 127.0.0.1
  *
- *      Added -S and -A command line arguments to control the state of
- *      the SYN and ACK flags in outgoing packets.  By using -A, it is
- *      now possible to traceroute through stateless firewalls which
+ *      Added -S and -A command line arguments to control the the SYN
+ *      and ACK flags in outgoing packets.  By using -A, it is now
+ *      possible to traceroute through stateless firewalls which
  *      permit hosts behind the firewalls to establish outgoing TCP
  *      connections.  In the absence of either -A or -S, -S is set.
  *
@@ -41,15 +57,15 @@ Extracted from tcptraceroute.c:
  *
  *      Contains large portions of code and ideas contributed by
  *      Scott Gifford <sgifford@tir.com>
- *      
- *      Attempt to determine what outgoing interface to use based on the
- *      destination address and the local system's interface list.  Could still
- *      use a good deal of work on BSD systems, though, especially when it
- *      comes to virtual addresses which reside on subnets different than the
- *      primary address.
  *
- *      The timeout code has been reworked significantly, and should now be
- *      much more reliable.
+ *      Attempt to determine what outgoing interface to use based on
+ *      the destination address and the local system's interface list.
+ *      Could still use a good deal of work on BSD systems, though,
+ *      especially when it comes to virtual addresses which reside on
+ *      subnets different than the primary address.
+ *      
+ *      The timeout code has been reworked significantly, and should
+ *      now be much more reliable.
  *      
  *      Added -E command line argument to send ECN (RFC2481) packets.
  *      Requested by Christophe Barb <christophe.barbe@lineo.fr> and

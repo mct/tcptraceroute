@@ -6,9 +6,8 @@
  * Copyright (c) 2001, Michael C. Toren <mct@toren.net>
  *
  * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License as published by the Free
- * Software Foundation; either version 2 of the License, or (at your option)
- * any later version.
+ * under the terms of the GNU General Public License, version 2, as published
+ * by the Free Software Foundation.
  *
  * This program is distributed in the hope that it will be useful, but
  * WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
@@ -31,10 +30,30 @@
  * Updates are available from http://michael.toren.net/code/tcptraceroute/
  */
 
+#define VERSION "tcptraceroute 1.3beta2 (2001-11-21)"
+#define BANNER  "Copyright (c) 2001, Michael C. Toren <mct@toren.net>\n\
+Updates are available from http://michael.toren.net/code/tcptraceroute/\n"
+
 /*
  * Revision history:
  *
- *	Version 1.3beta1 (2001-08-14)
+ *	Version 1.3beta2 (2001-11-21)
+ *
+ *		probe() and capture() now use a new proberecord structure which
+ *		contains information about each probe in a modularized way.
+ *
+ *		Added a new command line argument, --track-port, which causes
+ *		each probe to have a unique source port so that something other
+ *		than the IP ID can be used to track it.  Hopefully this will
+ *		make things work on Solaris, which modifies the IP ID of packets
+ *		written to a raw socket.  Also added a corresponding --track-id
+ *		argument to specify the old behavior of tracking IP ID's, which
+ *		is still the default.  If a source port is specified with -p,
+ *		--track-id is implied.
+ *
+ *		probe() now calls allocateid() to generate an IP ID, which
+ *		caches the last ALLOCATEID_CACHE_SIZE allocations to prevent
+ *		against duplicates.
  *
  *		Display "!<N>" instead of "!?" for unknown ICMP codes, as
  *		suggested by Kevin McAllister <kevin@mcallister.net>
@@ -57,9 +76,9 @@
  *		filter on the loopback interface to avoid apparent libpcap bugs
  *		which previously made it impossible to traceroute to 127.0.0.1
  *
- *		Added -S and -A command line arguments to control the state of
- *		the SYN and ACK flags in outgoing packets.  By using -A, it is
- *		now possible to traceroute through stateless firewalls which
+ *		Added -S and -A command line arguments to control the the SYN
+ *		and ACK flags in outgoing packets.  By using -A, it is now
+ *		possible to traceroute through stateless firewalls which
  *		permit hosts behind the firewalls to establish outgoing TCP
  *		connections.  In the absence of either -A or -S, -S is set.
  *
@@ -72,15 +91,15 @@
  *
  *		Contains large portions of code and ideas contributed by
  *		Scott Gifford <sgifford@tir.com>
- *		
- *		Attempt to determine what outgoing interface to use based on the
- *		destination address and the local system's interface list.  Could still
- *		use a good deal of work on BSD systems, though, especially when it
- *		comes to virtual addresses which reside on subnets different than the
- *		primary address.
  *
- *		The timeout code has been reworked significantly, and should now be
- *		much more reliable.
+ *		Attempt to determine what outgoing interface to use based on
+ *		the destination address and the local system's interface list.
+ *		Could still use a good deal of work on BSD systems, though,
+ *		especially when it comes to virtual addresses which reside on
+ *		subnets different than the primary address.
+ *		
+ *		The timeout code has been reworked significantly, and should
+ *		now be much more reliable.
  *		
  *		Added -E command line argument to send ECN (RFC2481) packets.
  *		Requested by Christophe Barb <christophe.barbe@lineo.fr> and
@@ -168,10 +187,6 @@
 #ifndef TH_CWR
 #define TH_CWR  0x80
 #endif
-
-#define VERSION "tcptraceroute 1.3beta1 (2001-08-09)"
-#define BANNER  "Copyright (c) 2001, Michael C. Toren <mct@toren.net>\n\
-Updates are available from http://michael.toren.net/code/tcptraceroute/\n"
 
 /* Buffer size used for a few strings, including the pcap filter */
 #define TEXTSIZE	1024
@@ -261,11 +276,11 @@ char *device, *name, *dst, *src;
 char dst_name[TEXTSIZE], dst_prt_name[TEXTSIZE], filter[TEXTSIZE];
 char errbuf[PCAP_ERRBUF_SIZE];
 pcap_t *pcap;
-struct timeval t1, t2;
+struct timeval now;
 int	sockfd, datalink, offset;
 int o_minttl, o_maxttl, o_timeout, o_debug, o_numeric, o_pktlen,
 	o_nqueries, o_dontfrag, o_tos, o_forceport, o_syn, o_ack, o_ecn,
-	o_nofilter, o_nogetinterfaces;
+	o_nofilter, o_nogetinterfaces, o_trackport;
 
 /* interface linked list, built later by getinterfaces() */
 struct interface_entry {
@@ -273,6 +288,17 @@ struct interface_entry {
 	u_long addr;
 	struct interface_entry *next;
 } *interfaces;
+
+/* probe() returns this structure, which describes the packet sent */
+typedef struct {
+	int ttl, q;
+	u_short id, src_prt;
+	struct timeval timestamp;
+	double delta;
+	u_long addr;
+	char *state;
+	char *string;
+} proberecord;
 
 extern char pcap_version[];
 extern int errno;
@@ -326,9 +352,9 @@ void pfatal(char *err)
 void usage(void)
 {
 	printf("\n%s\n%s\n", VERSION, BANNER);
-    fatal("Usage: %s [-nFE] [-i <interface>] [-f <first ttl>]
+    fatal("Usage: %s [-nNFSAE] [-i <interface>] [-f <first ttl>]
        [-l <packet length>] [-q <number of queries>] [-t <tos>]
-       [-m <max ttl>] [-[pP] <source port>] [-s <source address>]
+       [-m <max ttl>] [-pP] <source port>] [-s <source address>]
        [-w <wait time>] <host> [destination port] [packet length]\n\n", name);
 }
 
@@ -355,7 +381,9 @@ void *xrealloc(void *oldp, int size)
 			fatal("Out of memory!  Could not allocate 1 byte!\n");
 	}
 
-	if (! (p = realloc(oldp, size)))
+	p = realloc(oldp, size);
+
+	if (!p)
 		fatal("Out of memory!  Could not reallocate %d bytes!X\n", size);
 
 	return p;
@@ -378,7 +406,7 @@ int safe_snprintf(char *s, int size, char *fmt, ...)
 
 	va_start(ap, fmt);
 	ret = vsnprintf(s, size, fmt, ap);
-	s[size] = '\0';
+	s[size-1] = '\0';
 	va_end(ap);
 
 	return ret;
@@ -394,18 +422,14 @@ char *sprintable(char *s)
 	static char buf[TEXTSIZE];
 	int i;
 
-	for (i = 0; s[i]; i++)
-	{
-		if (i == TEXTSIZE)
-			break;
-
-		buf[i] = isprint(s[i]) ? s[i] : '?';
-	}
-
-	buf[i] = '\0';
-
-	if (i == 0)
+	if (s && s[0])
+		safe_strncpy(buf, s, TEXTSIZE);
+	else
 		safe_strncpy(buf, "(empty)", TEXTSIZE);
+
+	for (i = 0; buf[i]; i++)
+		if (! isprint(buf[i]))
+			buf[i] = '?';
 
 	return buf;
 }
@@ -459,7 +483,6 @@ struct timeval tvdiff(struct timeval *tv1, struct timeval *tv2)
 
 	return tvdiff;
 }
-
 
 /*
  * Is the timeval less than, equal to, or greater than zero?
@@ -521,7 +544,7 @@ char *iptohost(u_long in)
 }
 
 /*
- * Fetches the interface list, storing it in struct interface_entry interfaces
+ * Fetches the interface list, storing it in struct interface_entry interfaces.
  */
 
 void getinterfaces(void)
@@ -546,14 +569,7 @@ void getinterfaces(void)
 	ifc.ifc_buf = NULL;
 	p = NULL;
 
-	/*
-	 * The initial request length needs to be somewhat large, because
-	 * the incrementing technique doesn't work on BSD(?)  But, it can't
-	 * be too large, or ioct() will complain (on Linux at least) about
-	 * not being able to allocate enough memory for the request.
-	 */
-
-	numreqs = 1024;
+	numreqs = 32;
 
 	if ((s = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
 		fatal("socket error");
@@ -568,11 +584,12 @@ void getinterfaces(void)
 		if (ioctl(s, SIOCGIFCONF, &ifc) < 0)
 			pfatal("ioctl");
 
-		if (ifc.ifc_len >= sizeof(struct ifreq) * numreqs)
+		/* This "+ sizeof(struct ifreq) + 64" crap seems to be an (Open?)BSDism. */
+		if ( (ifc.ifc_len + sizeof(struct ifreq) + 64) >= (sizeof(struct ifreq) * numreqs) )
 		{
 			/* Assume it overflowed and try again */
-			numreqs += 1024;
-			if (numreqs > 200000)
+			numreqs += 32;
+			if (numreqs > 20000)
 				break; /* Too big! */
 			debug("ifreq buffer grown to %d\n", numreqs);
 			continue;
@@ -581,7 +598,7 @@ void getinterfaces(void)
 		break;
 	}
 
-	debug("successfully retrieved interface list\n");
+	debug("Successfully retrieved interface list\n");
 
 #ifdef HASSALEN
 	debug("Using HASALEN method for finding addresses.\n");
@@ -616,7 +633,7 @@ void getinterfaces(void)
 		if (ifrp->ifr_addr.sa_family != AF_INET &&
 			ifrp->ifr_addr.sa_family != AF_LINK)
 		{
-			debug("ignoring non-AF_INET interface %s\n", sprintable(ifr.ifr_name));
+			debug("Ignoring non-AF_INET interface %s\n", sprintable(ifr.ifr_name));
 			continue;
 		}
 
@@ -699,6 +716,7 @@ char *finddev(u_long with_src)
 	struct interface_entry *p;
 	char *device = NULL;
 
+	/* First, see if we're trying to trace to ourself */
 	for (p = interfaces; p; p = p->next)
 		if (p->addr == dst_ip)
 		{
@@ -716,6 +734,64 @@ char *finddev(u_long with_src)
 	return device;
 }
 
+
+/*
+ * Request a local unused TCP port from the kernel using bind(2)
+ */
+
+u_short allocateport(u_short requested)
+{
+	struct sockaddr_in in;
+	int	s, insize;
+
+	if ((s = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
+		pfatal("socket error");
+
+	insize = sizeof(in);
+	memset(&in, 0, insize);
+
+	in.sin_family = AF_INET;
+	in.sin_port = htons(requested);
+
+	if ((bind(s, (struct sockaddr *)&in, insize)) < 0)
+		return 0;
+
+	if ((getsockname(s, (struct sockaddr *)&in, &insize)) < 0)
+		pfatal("getsockname");
+
+	close(s);
+	return ntohs(in.sin_port);
+}
+
+/*
+ * Allocate an IP ID from our pool of unallocated ID's.  A cache is kept of
+ * the last ALLOCATEID_CACHE_SIZE allocations, so we can check for duplicates.
+ */
+
+#define ALLOCATEID_CACHE_SIZE 90
+
+u_short allocateid(void)
+{
+	static u_short ids[ALLOCATEID_CACHE_SIZE];
+	static int n;
+	int i, j;
+
+	if ((n = n % ALLOCATEID_CACHE_SIZE) == 0)
+	{
+		debug("Generating a new batch of %d IP ID's\n", ALLOCATEID_CACHE_SIZE);
+
+		for(i = 0; i < ALLOCATEID_CACHE_SIZE; i++)
+		{
+			for(ids[i] = libnet_get_prand(PRu16), j = i + 1; j < ALLOCATEID_CACHE_SIZE + i; j++)
+				if (ids[i] == ids[j % ALLOCATEID_CACHE_SIZE])
+					ids[i] = libnet_get_prand(PRu16), j = i + 1;
+		}
+	}
+
+	return ids[n++];
+}
+
+
 /* 
  * What a kludge, but it works.  The aim is to be as compatible as possible
  * with traceroute(8), with the one exception that if for the same hop we
@@ -724,7 +800,7 @@ char *finddev(u_long with_src)
  * tracing through links which have per-packet, round-robin load balancing.
  */
 
-void showprobe(int ttl, int q, u_long addr, char *state, char *fmt, ...)
+void showprobe(proberecord *record)
 {
 	/* Variables to keep state between calls */
 	static char laststate[TEXTSIZE];
@@ -733,7 +809,6 @@ void showprobe(int ttl, int q, u_long addr, char *state, char *fmt, ...)
 	static int everprint;
 
 	int printflag = 0;
-	va_list ap;
 
 	/* kludge to make debug mode usable */
 	if (o_debug)
@@ -744,62 +819,66 @@ void showprobe(int ttl, int q, u_long addr, char *state, char *fmt, ...)
 	}
 
 	/* ttl */
-	if (lastttl != ttl)
+	if (lastttl != record->ttl)
 	{
-		printf("%2d  ", ttl);
+		printf("%2d  ", record->ttl);
 		printflag = 1;
 		everprint = 0;
 		safe_strncpy(laststate, "", TEXTSIZE);
 	}
-	else if (lastaddr != addr && addr != INADDR_ANY && lastaddr != INADDR_ANY)
+	else if (lastaddr != record->addr && record->addr != INADDR_ANY && lastaddr != INADDR_ANY)
 	{
 		printf("\n    ");
 		printflag = 1;
 	}
 
 	/* host */
-	if ((printflag || !everprint) && addr != INADDR_ANY)
+	if ((printflag || !everprint) && record->addr != INADDR_ANY)
 	{
-		if (q > 1 && lastaddr == INADDR_ANY)
+		if (record->q > 1 && lastaddr == INADDR_ANY)
 			printf(" ");
 
-		printf("%s (%s)", iptohost(addr), iptos(addr));
+		printf("%s (%s)", iptohost(record->addr), iptos(record->addr));
 		everprint = 1;
 	}
 
 	/* tcp state */
-	if ( ((ttl != lastttl) && state) ||
-		((ttl == lastttl) && state && (strncmp(laststate, state, TEXTSIZE) != 0)))
+	if ( ((record->ttl != lastttl) && record->state) ||
+		((record->ttl == lastttl) && record->state && (strncmp(laststate, record->state, TEXTSIZE) != 0)))
 	{
-		printf(" [%s]", state);
+		printf(" [%s]", record->state);
 	}
 
 	/* space before ms */
-	if (! (addr == INADDR_ANY && q == 1))
+	if (! (record->addr == INADDR_ANY && record->q == 1))
 	{
 		/* if timeout, only print one space. otherwise, two */
-		if ((addr == INADDR_ANY) || (lastaddr == INADDR_ANY))
+		if ((record->addr == INADDR_ANY) || (lastaddr == INADDR_ANY))
 			printf(" ");
 		else
 			printf("  ");
 	}
 
-	va_start(ap, fmt);
-	vprintf(fmt, ap);
-	va_end(ap);
+	if (record->addr == INADDR_ANY)
+		record->string = "*";
+	
+	if (! record->string)
+		fatal("something bad happened\n");
 
-	if (q == o_nqueries)
+	printf(record->string, record->delta);
+
+	if (record->q == o_nqueries)
 		printf("\n");
 
-	lastttl = ttl;
-	lastaddr = addr;
-	if (state)
-		safe_strncpy(laststate, state, TEXTSIZE);
+	lastttl = record->ttl;
+	lastaddr = record->addr;
+	if (record->state)
+		safe_strncpy(laststate, record->state, TEXTSIZE);
 
 	/* kludge to make debug mode usable */
 	if (o_debug)
 		fprintf(stdout, "\n");
-	if (o_debug && q != o_nqueries)
+	if (o_debug && record->q != o_nqueries)
 		fprintf(stdout, "\n");
 
 	fflush(stdout);
@@ -811,9 +890,7 @@ void showprobe(int ttl, int q, u_long addr, char *state, char *fmt, ...)
 
 void defaults(void)
 {
-	struct sockaddr_in in;
 	struct servent *serv;
-	int insize;
 	u_long recommended_src;
 
 	getinterfaces();
@@ -859,25 +936,19 @@ void defaults(void)
 
 	pcap_close(pcap);
 
-	if (! o_forceport)
+	if (src_prt)
 	{
-		if ((sockfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
-			pfatal("socket error");
+		o_trackport = 0;
+		debug("Disabling o_trackport implied by specifying src_prt\n");
+	}
 
-		insize = sizeof(in);
-		memset(&in, 0, insize);
+	if (! o_trackport)
+	{
+		if (! o_forceport)
+			src_prt = allocateport(src_prt);
 
-		in.sin_family = AF_INET;
-		in.sin_port = htons(src_prt);
-
-		if ((bind(sockfd, (struct sockaddr *)&in, insize)) < 0)
-			fatal("Sorry, could not bind to port %d.  Use -P instead of -p to override.\n", src_prt);
-
-		if ((getsockname(sockfd, (struct sockaddr *)&in, &insize)) < 0)
-			pfatal("getsockname");
-
-		src_prt = ntohs(in.sin_port);
-		close(sockfd);
+		if (src_prt == 0)
+			fatal("Sorry, requested local port is already in use.  Use -P, instead of -p, to override.\n");
 	}
 
 	if (o_minttl <= 0 || o_maxttl <= 0)
@@ -923,8 +994,9 @@ void defaults(void)
 		o_syn = 1;
 	}
 
-	fprintf(stderr, "Selected device %s, address %s, port %d for outgoing packets\n",
-		device, iptos(src_ip), src_prt);
+	fprintf(stderr, "Selected device %s, address %s", device, iptos(src_ip));
+	if (! o_trackport) fprintf(stderr, ", port %d", src_prt);
+	fprintf(stderr, " for outgoing packets\n");
 }
 
 /*
@@ -939,15 +1011,15 @@ void initcapture(void)
 	if (! (pcap = pcap_open_live(device, offset + SNAPLEN, 0, 10, errbuf)))
 		fatal("pcap_open_live failed: %s", errbuf);
 
-	safe_snprintf(filter, TEXTSIZE,
-		"(tcp and src host %s and src port %d and dst host %s and dst port %d)
+	safe_snprintf(filter, TEXTSIZE, "
+		(tcp and src host %s and src port %d and dst host %s)
 		or ((icmp[0] == 11 or icmp[0] == 3) and dst host %s)",
-			iptos(dst_ip), dst_prt, iptos(src_ip), src_prt, iptos(src_ip));
+			iptos(dst_ip), dst_prt, iptos(src_ip), iptos(src_ip));
 
 	if (o_nofilter)
 		filter[0] = '\0';
 
-	debug("pcap filter is:\n'%s'\n",filter);
+	debug("pcap filter is: %s\n", o_nofilter ? "(nothing)" : filter);
 
 	localnet = 0;
 	netmask = 0;
@@ -963,40 +1035,79 @@ void initcapture(void)
 }
 
 /*
- * Sends out a TCP SYN packet with the specified TTL, and returns
- * the IP ID that was sent so we know which one to listen for later.
+ * Sends out a TCP SYN packet with the specified TTL, and returns a
+ * proberecord structure describing the packet sent, so we know what
+ * to listen for later.  A new IP ID is generated for each probe, and
+ * a new source port if o_trackport is specified.
  */
 
-u_short probe(int ttl)
+void probe(proberecord *record, int ttl, int q)
 {
 	static u_char *payload, *buf;
-	u_short id;
 	int i, size, ret;
 
+	/* Initialize the packet buffer */
+	size = LIBNET_IP_H + LIBNET_TCP_H + o_pktlen;
+
+	if (!buf)
+	{
+		debug("Initializing packet buffer of %d bytes\n", size);
+		buf = xrealloc(buf, size);
+	}
+
+	memset(buf, 0, size);
+
+	/* Initialize the packet payload */
 	if (o_pktlen && !payload)
 	{
 		debug("Initializing payload of %d bytes\n", o_pktlen);
 		payload = xrealloc(payload, o_pktlen);
 
 		for(i = 0; i < o_pktlen; i++)
-			payload[i] = '!' + (i % ('~' - '!'));
+			payload[i] = i % ('~' - '!') + '!';
+
+			/*
+			 * TODO: Should the byte pattern we use to pad out the
+			 * packet be a command line argument?  Does anyone care?
+			 * Would it just be feature bloat?
+			 */
+
+		debug("Payload: %s\n", sprintable(payload));
 	}
 
-	size = LIBNET_IP_H + LIBNET_TCP_H + o_pktlen;
+	/*
+	 * Initialize the new proberecord structure
+	 *
+	 * TODO: If we're going to be sending out more than one probe at once,
+	 * which is the eventual goal of all the proberecord structure stuff, we
+	 * really should be generating a long list of id's to use early on, and
+	 * check while they're being generated if there are any duplicates.
+	 */
 
-	if (!buf)
+	record->q = q;
+	record->ttl = ttl;
+	record->addr = INADDR_ANY;
+	record->state = NULL;
+	record->string = NULL;
+	record->src_prt = src_prt;
+	record->id = allocateid();
+	record->delta = 0;
+
+	if (o_trackport)
 	{
-		debug("Initializing probe buffer\n");
-		buf = xrealloc(buf, size);
+		record->src_prt = allocateport(0);
+		if (record->src_prt == 0)
+			pfatal("Could not allocate local port: bind");
 	}
 
-	memset(buf, 0, size);
-	do { id = libnet_get_prand(PRu32); } while (id < 10);
+	if (gettimeofday(&(record->timestamp), NULL) < 0)
+		pfatal("gettimeofday");
 
+	/* Build the packet, and send it off into the cold, cruel world ... */
 	libnet_build_ip(
 		LIBNET_TCP_H+o_pktlen,	/* len			*/
 		o_tos,					/* tos			*/
-		id,						/* id			*/
+		record->id,				/* id			*/
 		o_dontfrag ? IP_DF : 0,	/* frag			*/
 		ttl,					/* ttl			*/
 		IPPROTO_TCP,			/* proto		*/
@@ -1007,7 +1118,7 @@ u_short probe(int ttl)
 		buf);					/* buffer		*/
 
 	libnet_build_tcp(
-		src_prt,				/* source port	*/
+		record->src_prt,		/* source port	*/
 		dst_prt,				/* dest port	*/
 		0,						/* seq number	*/
 		0,						/* ack number	*/
@@ -1024,23 +1135,18 @@ u_short probe(int ttl)
 
 	libnet_do_checksum(buf, IPPROTO_TCP, LIBNET_TCP_H + o_pktlen);
 
-	if (gettimeofday(&t1, NULL) < 0)
-		pfatal("gettimeofday");
-
 	if ((ret = libnet_write_ip(sockfd, buf, size)) < size)
 		fatal("libnet_write_ip failed?  Attempted to write %d bytes, only wrote %d\n",
 			  size, ret);
-	
-	return id;
 }
 
 /*
- * Listens for responses to our probe matching the specified IP ID and print
- * the results.  Returns 1 if the destination was reached, or 0 if we need to
+ * Listens for responses to our probe matching the specified proberecord
+ * structure.  Returns 1 if the destination was reached, or 0 if we need to
  * increment the TTL some more.
  */
 
-int capture(int ttl, int q, u_short id)
+int capture(proberecord *record)
 {
 	u_char *packet;
 	struct pcap_pkthdr packet_hdr;
@@ -1049,7 +1155,6 @@ int capture(int ttl, int q, u_short id)
 	struct libnet_icmp_hdr *icmp_hdr;
 	struct timeval start, now, timepassed, timeout_tv, timeleft;
 	int pcap_fd, firstpass, ret, len;
-	double delta;
 	fd_set sfd;
 
 	firstpass = 1;
@@ -1085,7 +1190,6 @@ int capture(int ttl, int q, u_short id)
 			if (tvsign(&timeleft) <= 0)
 			{
 				debug("timeout\n");
-				showprobe(ttl, q, INADDR_ANY, NULL, "*");
 				return 0;
 			}
 		}
@@ -1117,7 +1221,7 @@ int capture(int ttl, int q, u_short id)
 
 		if ((packet = (u_char *)pcap_next(pcap, &packet_hdr)) == NULL)
 		{
-			/* debug("null pointer from pcap_next()\n"); */
+			debug("null pointer from pcap_next()\n");
 			continue;
 		}
 
@@ -1140,11 +1244,11 @@ int capture(int ttl, int q, u_short id)
 			continue;
 		}
 
-		if (gettimeofday(&t2, NULL) < 0)
+		if (gettimeofday(&now, NULL) < 0)
 			pfatal("gettimeofday");
 
-		delta = (double)(t2.tv_sec - t1.tv_sec) * 1000 +
-			(double)(t2.tv_usec - t1.tv_usec) / 1000;
+		record->delta = (double)(now.tv_sec - record->timestamp.tv_sec) * 1000 +
+			(double)(now.tv_usec - record->timestamp.tv_usec) / 1000;
 
 		if (ip_hdr->ip_p == IPPROTO_ICMP)
 		{
@@ -1156,14 +1260,6 @@ int capture(int ttl, int q, u_short id)
 
 			icmp_hdr = (struct libnet_icmp_hdr *)(packet + LIBNET_IP_H);
 			debug("received icmp packet\n");
-
-			if (icmp_hdr->icmp_type != ICMP_TIMXCEED &&
-				icmp_hdr->icmp_type != ICMP_UNREACH)
-			{
-				showprobe(ttl, q, ip_hdr->ip_src.s_addr, NULL,
-					"%.3f ms -- Unexpected ICMP\n", delta);
-				return 0;
-			}
 
 			/*
 			 * The IP header that generated the ICMP packet is quoted
@@ -1200,19 +1296,19 @@ int capture(int ttl, int q, u_short id)
 			/* These are not the droids you are looking for */
 			if (old_ip_hdr->ip_p != IPPROTO_TCP)
 			{
-				debug("icmp packet doesn't quote a tcp header\n");
+				debug("Ignoring ICMP packet which doesn't quote a TCP header\n");
 				continue;
 			}
 
 			/* We are free to go about our business */
-			if (ntohs(old_ip_hdr->ip_id) != id)
+			if (! o_trackport && (ntohs(old_ip_hdr->ip_id) != record->id))
 			{
 				debug("icmp packet doesn't contain the id we sent\n");
 				continue;
 			}
 
 			/* Move along, move along */
-			if ((ntohs(old_tcp_hdr->th_sport) != src_prt)
+			if ((ntohs(old_tcp_hdr->th_sport) != record->src_prt)
 				|| (ntohs(old_tcp_hdr->th_dport) != dst_prt))
 			{
 				debug("icmp packet doesn't contain the correct tcp port numbers\n");
@@ -1265,15 +1361,24 @@ int capture(int ttl, int q, u_short id)
 						safe_snprintf(s, TEXTSIZE, "!<%d>", icmp_hdr->icmp_code);
 				}
 
-				showprobe(ttl, q, ip_hdr->ip_src.s_addr, NULL,
-					"%.3f ms %s", delta, s);
+				record->addr = ip_hdr->ip_src.s_addr;
+				record->string = xrealloc(NULL, TEXTSIZE);
+				safe_snprintf(record->string, TEXTSIZE, "%%.3f ms %s", s);
 				return 1;
 			}
 
 			if (icmp_hdr->icmp_type == ICMP_TIMXCEED)
 			{
-				showprobe(ttl, q, ip_hdr->ip_src.s_addr, NULL,
-					"%.3f ms", delta);
+				record->addr = ip_hdr->ip_src.s_addr;
+				record->string = "%.3f ms";
+				return 0;
+			}
+
+			if (icmp_hdr->icmp_type != ICMP_TIMXCEED &&
+				icmp_hdr->icmp_type != ICMP_UNREACH)
+			{
+				record->addr = ip_hdr->ip_src.s_addr;
+				record->string = "%.3f ms -- Unexpected ICMP";
 				return 0;
 			}
 
@@ -1282,12 +1387,10 @@ int capture(int ttl, int q, u_short id)
 
 		if (ip_hdr->ip_p == IPPROTO_TCP)
 		{
-			char *s;
-
 			if (ip_hdr->ip_src.s_addr != dst_ip)
 			{
 				debug("tcp packet's origin does not match our target's address (%s, not %s)\n",
-					iptos(ip_hdr->ip_dst.s_addr), iptos(src_ip));
+					iptos(ip_hdr->ip_src.s_addr), iptos(dst_ip));
 				continue;
 			}
 
@@ -1313,30 +1416,40 @@ int capture(int ttl, int q, u_short id)
 					tcp_hdr->th_flags ? "" : "(none)");
 
 			if ((ntohs(tcp_hdr->th_sport) != dst_prt)
-				|| (ntohs(tcp_hdr->th_dport) != src_prt))
+				|| (ntohs(tcp_hdr->th_dport) != record->src_prt))
 			{
 				debug("tcp packet doesn't contain the correct port numbers\n");
 				continue;
 			}
 
+			record->state = xrealloc(NULL, TEXTSIZE);
+
 			if (tcp_hdr->th_flags & TH_RST)
-				s = "closed";
+				safe_snprintf(record->state, TEXTSIZE, "closed");
 
 			else if ((tcp_hdr->th_flags & TH_SYN)
 					&& (tcp_hdr->th_flags & TH_ACK)
 					&& (tcp_hdr->th_flags & TH_ECN))
-				s = "open, ecn capable";
+				safe_snprintf(record->state, TEXTSIZE, "open, ecn");
 
 			else if ((tcp_hdr->th_flags & TH_SYN)
 					&& (tcp_hdr->th_flags & TH_ACK))
-				s = "open";
+				safe_snprintf(record->state, TEXTSIZE, "open");
 
 			else
-				s = "unknown";
+				safe_snprintf(record->state, TEXTSIZE, "unknown,%s%s%s%s%s%s%s%s%s",
+					tcp_hdr->th_flags & TH_RST  ? " RST" : "",
+					tcp_hdr->th_flags & TH_SYN  ? " SYN" : "",
+					tcp_hdr->th_flags & TH_ACK  ? " ACK" : "",
+					tcp_hdr->th_flags & TH_PUSH ? " PSH" : "",
+					tcp_hdr->th_flags & TH_FIN  ? " FIN" : "",
+					tcp_hdr->th_flags & TH_URG  ? " URG" : "",
+					tcp_hdr->th_flags & TH_CWR  ? " CWR" : "",
+					tcp_hdr->th_flags & TH_ECN  ? " ECN" : "",
+					tcp_hdr->th_flags ? "" : " no flags");
 
-			showprobe(ttl, q, ip_hdr->ip_src.s_addr, s,
-				"%.3f ms", delta);
-
+			record->addr = ip_hdr->ip_src.s_addr;
+			record->string = "%.3f ms";
 			return 1;
 		}
 
@@ -1348,26 +1461,31 @@ int capture(int ttl, int q, u_short id)
 void trace(void)
 {
 	int ttl, q, done;
-	u_short id;
+	proberecord *record;
 
 	fprintf(stderr, "Tracing the path to %s on TCP port %s, %d hops max",
 		dst_name, dst_prt_name, o_maxttl);
-	
 	if (o_pktlen)
 		fprintf(stderr, ", %d byte packets", o_pktlen + LIBNET_TCP_H + LIBNET_IP_H);
 	fprintf(stderr, "\n");
 
 	for (ttl = o_minttl, done = 0; !done && ttl <= o_maxttl; ttl++)
 	{
-		for (q = 1; q < o_nqueries + 1; q++)
+		for (q = 1; q <= o_nqueries; q++)
 		{
-			id = probe(ttl);
-			debug("Sent probe %d of %d for hop %d, IP ID %d, %s%s%s\n",
-				q, o_nqueries, ttl, id,
+			record = xrealloc(NULL, sizeof(proberecord));
+			probe(record, ttl, q);
+
+			debug("Sent probe %d of %d for hop %d, IP ID %d, source port %d, %s%s%s\n",
+				q, o_nqueries, ttl, record->id, record->src_prt,
 				o_syn ? "SYN " : "",
 				o_ack ? "ACK " : "",
 				o_ecn ? "CWR ECN " : "");
-			done |= capture(ttl, q, id);
+
+			done += capture(record);
+
+			showprobe(record);
+			free(record);
 		}
 	}
 
@@ -1428,7 +1546,7 @@ int main(int argc, char *argv[])
 	char *s;
 
 	src_ip	= 0;
-	src_prt	= 0;
+	src_prt = 0;
 	dst_prt	= 0;
 	src		= NULL;
 	device	= NULL;
@@ -1449,6 +1567,7 @@ int main(int argc, char *argv[])
 	o_timeout = 3;
 	o_nofilter = 0;
 	o_nogetinterfaces = 0;
+	o_trackport = 0;
 
 	/* strip out path from argv[0] */
 	for (name = s = argv[0]; s[0]; s++)
@@ -1488,6 +1607,27 @@ int main(int argc, char *argv[])
 			o_nogetinterfaces = 1;
 			debug("o_nogetinterfaces set\n");
 			continue;
+		}
+
+		if ((strcmp("--track-id", s) == 0)
+			|| (strcmp("--track-ipid", s) == 0))
+		{
+			o_trackport = 0;
+			debug("o_trackport disabled\n");
+			continue;
+		}
+
+		if (strcmp("--track-port", s) == 0)
+		{
+			o_trackport = 1;
+			debug("o_trackport set\n");
+			continue;
+		}
+
+		if (s[0] == '-' && s[1] == '-')
+		{
+			fprintf(stderr, "Unknown command line argument: %s\n", s);
+			usage();
 		}
 
 		for (s++; s[0]; s++)
