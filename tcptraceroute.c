@@ -30,14 +30,14 @@
  * Updates are available from http://michael.toren.net/code/tcptraceroute/
  */
 
-#define VERSION "tcptraceroute 1.3beta3 (2001-12-01)"
+#define VERSION "tcptraceroute 1.3beta4 (2001-12-01)"
 #define BANNER  "Copyright (c) 2001, Michael C. Toren <mct@toren.net>\n\
 Updates are available from http://michael.toren.net/code/tcptraceroute/\n"
 
 /*
  * Revision history:
  *
- *	Version 1.3beta3 (2001-12-01)
+ *	Version 1.3beta4 (2001-12-01)
  *
  *		probe() and capture() now use a new proberecord structure which
  *		contains information about each probe in a modularized way.
@@ -428,7 +428,7 @@ char *sprintable(char *s)
 		safe_strncpy(buf, "(empty)", TEXTSIZE);
 
 	for (i = 0; buf[i]; i++)
-		if (! isprint(buf[i]))
+		if (! isprint((unsigned char) buf[i]))
 			buf[i] = '?';
 
 	return buf;
@@ -1576,12 +1576,12 @@ int getnopt(char **in, int *argc, char **argv[])
 	opt = s[0];
 	s++;
 
-	if (isdigit(s[0]))
+	if (isdigit((unsigned char) s[0]))
 	{
 		safe_strncpy(buf, s, TEXTSIZE);
 
 		for (i = 0; buf[i]; i++)
-			if (!isdigit(buf[i]))
+			if (!isdigit((unsigned char) buf[i]))
 			{
 				buf[i] = '\0';
 				break;
@@ -1599,7 +1599,7 @@ int getnopt(char **in, int *argc, char **argv[])
 		(*argc)--, (*argv)++;
 
 		for (s = (*argv)[0], i = 0; s[i]; i++)
-			if (!isdigit(s[i]))
+			if (!isdigit((unsigned char) s[i]))
 				fatal("Numeric argument required for -%c\n", opt);
 
 		value = atoi(s);
