@@ -3,15 +3,23 @@ Extracted from tcptraceroute.c:
 /*
  * Revision history:
  *
- *  Version 1.3beta7 (2002-05-10)
+ *  Version 1.4 (2002-07-30)
+ *
+ *      Added linklayer support for Linux ISDN Sync-PPP interfaces,
+ *      by Dr. Peter Bieringer <pbieringer@aerasec.de>
+ *
+ *      Adds support back for DLT_RAW interfaces, which was inadvertently
+ *      removed sometime between 1.2 and 1.3beta1, and as a result caused
+ *      tcptraceroute to fail over PPP interfaces.  Reported in Debian
+ *      Bug#154793 by David Harris <eelf@sympatico.ca>.
+ *
+ *  Version 1.3 (2002-05-19)
+ *
+ *      Now detects (and ignores) IP packets with IP options.
  *
  *      Packets are now properly aligned by allocating new space and
  *      copying the packet data there before casting packet header
  *      structs against them.
- *
- *      Command line argument handling now uses getopt(), after looping
- *      through and stripping out the long options by hand, in an attempt
- *      to be as portable as possible.
  *
  *      New, undocumented --no-select command line argument added to never
  *      call select(), which fails to indicate that a BPF socket is ready
@@ -62,7 +70,7 @@ Extracted from tcptraceroute.c:
  *      filter on the loopback interface to avoid apparent libpcap bugs
  *      which previously made it impossible to traceroute to 127.0.0.1
  *
- *      Added -S and -A command line arguments to control the the SYN
+ *      Added -S and -A command line arguments to control the SYN
  *      and ACK flags in outgoing packets.  By using -A, it is now
  *      possible to traceroute through stateless firewalls which
  *      permit hosts behind the firewalls to establish outgoing TCP

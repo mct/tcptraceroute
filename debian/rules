@@ -37,7 +37,7 @@ install: build
 	dh_installdirs
 
 	# Add here commands to install the package into debian/tmp.
-	$(MAKE) install DESTDIR=`pwd`/debian/tmp/usr/sbin/
+	$(MAKE) install DESTDIR=`pwd`/debian/tmp/usr/bin/
 
 
 # Build architecture-independent files here.
@@ -68,8 +68,8 @@ endif
 	dh_compress
 	dh_fixperms
 	# You may want to make some executables suid here.
-	chmod 4755 debian/tmp/usr/sbin/tcptraceroute
-	chown root.root debian/tmp/usr/sbin/tcptraceroute
+	chmod 4755 debian/tmp/usr/bin/tcptraceroute
+	chown root.root debian/tmp/usr/bin/tcptraceroute
 #	dh_makeshlibs
 	dh_installdeb
 #	dh_perl

@@ -135,7 +135,6 @@ To trace the path to a mail server listening for connections on port 25:
 .RS
 .B tcptraceroute mailserver 25
 .RE
-.P
 .SH BUGS
 No error checking is performed on the source address specified by the \-s
 flag, and it is therefore possible for 
@@ -143,18 +142,6 @@ flag, and it is therefore possible for
 tcptraceroute
 to send out TCP SYN packets for which it has no chance of seeing a response
 to.
-.P
-Complete portability to other Unix systems has not been tested;
-specifically,
-.B
-tcptraceroute
-will not function on systems which modify the IP ID field of
-packets written to a raw socket.  As of the time of this writing,
-.B
-tcptraceroute
-is known to compile and function properly on Linux, OpenBSD, and FreeBSD
-systems.  If you run into complications on another platform, please let
-me know.
 .SH AUTHOR
 Michael C. Toren <mct@toren.net>
 .SH AVAILABILITY

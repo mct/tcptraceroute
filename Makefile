@@ -12,12 +12,6 @@ tcptraceroute: tcptraceroute.c
 		-o tcptraceroute tcptraceroute.c \
 		`libnet-config --libs` -lpcap
 
-6:
-	$(MAKE) CFLAGS="$(CFLAGS) -L/usr/local/pkg/libpcap-0.6.2/lib -I/usr/local/pkg/libpcap-0.6.2/include"
-
-7:
-	$(MAKE) CFLAGS="$(CFLAGS) -L/usr/local/pkg/libpcap-0.7.1/lib -I/usr/local/pkg/libpcap-0.7.1/include"
-
 static:
 	$(MAKE) tcptraceroute CFLAGS="$(CFLAGS) -static"
 

@@ -30,22 +30,30 @@
  * Updates are available from http://michael.toren.net/code/tcptraceroute/
  */
 
-#define VERSION "tcptraceroute 1.3beta7 (2002-05-10)"
+#define VERSION "tcptraceroute 1.4 (2002-07-30)"
 #define BANNER  "Copyright (c) 2001, 2002 Michael C. Toren <mct@toren.net>\n\
 Updates are available from http://michael.toren.net/code/tcptraceroute/\n"
 
 /*
  * Revision history:
  *
- *	Version 1.3beta7 (2002-05-10)
+ *	Version 1.4 (2002-07-30)
+ *
+ *		Added linklayer support for Linux ISDN Sync-PPP interfaces,
+ *		by Dr. Peter Bieringer <pbieringer@aerasec.de>
+ *
+ *		Adds support back for DLT_RAW interfaces, which was inadvertently
+ *		removed sometime between 1.2 and 1.3beta1, and as a result caused
+ *		tcptraceroute to fail over PPP interfaces.  Reported in Debian
+ *		Bug#154793 by David Harris <eelf@sympatico.ca>.
+ *
+ *	Version 1.3 (2002-05-19)
+ *
+ *		Now detects (and ignores) IP packets with IP options.
  *
  *		Packets are now properly aligned by allocating new space and
  *		copying the packet data there before casting packet header
  *		structs against them.
- *
- *		Command line argument handling now uses getopt(), after looping
- *		through and stripping out the long options by hand, in an attempt
- *		to be as portable as possible.
  *
  *		New, undocumented --no-select command line argument added to never
  *		call select(), which fails to indicate that a BPF socket is ready
@@ -96,7 +104,7 @@ Updates are available from http://michael.toren.net/code/tcptraceroute/\n"
  *		filter on the loopback interface to avoid apparent libpcap bugs
  *		which previously made it impossible to traceroute to 127.0.0.1
  *
- *		Added -S and -A command line arguments to control the the SYN
+ *		Added -S and -A command line arguments to control the SYN
  *		and ACK flags in outgoing packets.  By using -A, it is now
  *		possible to traceroute through stateless firewalls which
  *		permit hosts behind the firewalls to establish outgoing TCP
@@ -239,11 +247,17 @@ struct datalinktype {
 	char *name;
 } datalinktypes[] = {
 
+#ifdef DLT_RAW
+	{	DLT_RAW,			0,		"RAW"			},
+#endif
 #ifdef DLT_EN10MB
 	{	DLT_EN10MB,			14,		"ETHERNET"		},
 #endif
 #ifdef DLT_PPP
 	{	DLT_PPP,			4,		"PPP"			},
+#endif
+#ifdef DLT_LINUX_SLL
+	{	DLT_LINUX_SLL,		16,		"PPP_HDLC"		},
 #endif
 #ifdef DLT_SLIP
 	{	DLT_SLIP,			16,		"SLIP"			},
@@ -268,9 +282,6 @@ struct datalinktype {
 #endif
 
 	/* Does anyone know correct values for these? */
-#ifdef DLT_RAW
-	{	DLT_RAW,			-1,		"RAW"			},
-#endif
 #ifdef DLT_ATM_RFC1483
 	{	DLT_ATM_RFC1483,	-1,		"ATM_RFC1483"	},
 #endif
@@ -470,7 +481,7 @@ int isnumeric(char *s)
 		return 0;
 
 	for (i = 0; s[i]; i++)
-		if (! isdigit(s[i]))
+		if (! isdigit((u_char) s[i]))
 			return 0;
 	
 	return 1;
@@ -942,7 +953,7 @@ void showprobe(proberecord *record)
 	if (! (record->addr == INADDR_ANY && record->q == 1))
 	{
 		/* if timeout, only print one space. otherwise, two */
-		if ((record->addr == INADDR_ANY) || (lastaddr == INADDR_ANY))
+		if ((record->addr == INADDR_ANY) || (lastaddr == INADDR_ANY && record->q > 1))
 			printf(" ");
 		else
 			printf("  ");
@@ -1412,6 +1423,18 @@ int capture(proberecord *record)
 
 		ALIGN_PACKET(ip_hdr, libnet_ip_hdr, 0);
 
+		if (ip_hdr->ip_v != 4)
+		{
+			debug("Ignoring non-IPv4 packet\n");
+			continue;
+		}
+
+		if (ip_hdr->ip_hl > 5)
+		{
+			debug("Ignoring IP packet with IP options\n");
+			continue;
+		}
+
 		if (ip_hdr->ip_dst.s_addr != src_ip)
 		{
 			debug("Ignoring IP packet not addressed to us (%s, not %s)\n",
@@ -1441,11 +1464,12 @@ int capture(proberecord *record)
 			debug("Received icmp packet\n");
 
 			/*
-			 * The IP header that generated the ICMP packet is quoted
-			 * here.  I don't know what the +4 is, but it works.
+			 * The IP header, plus eight bytes of it's payload that generated
+			 * the ICMP packet is quoted here, prepended with four bytes of
+			 * padding.
 			 */
 
-			if (len < LIBNET_IP_H + LIBNET_ICMP_H + 4 + LIBNET_IP_H + 4)
+			if (len < LIBNET_IP_H + LIBNET_ICMP_H + 4 + LIBNET_IP_H + 8)
 			{
 				debug("Ignoring icmp packet with incomplete payload\n");
 				continue;
@@ -1454,9 +1478,25 @@ int capture(proberecord *record)
 			ALIGN_PACKET(old_ip_hdr, libnet_ip_hdr,
 				0 + LIBNET_IP_H + LIBNET_ICMP_H + 4);
 
-			/* The entire TCP header isn't here, but the port numbers are */
+			/*
+			 * The entire TCP header isn't here, but the source port,
+			 * destination port, and sequence number fiels are.
+			 */
+
 			ALIGN_PACKET(old_tcp_hdr, libnet_tcp_hdr,
 				0 + LIBNET_IP_H + LIBNET_ICMP_H + 4 + LIBNET_IP_H);
+
+			if (old_ip_hdr->ip_v != 4)
+			{
+				debug("Ignoring ICMP packet which quotes a non-IPv4 packet\n");
+				continue;
+			}
+
+			if (old_ip_hdr->ip_hl > 5)
+			{
+				debug("Ignoring ICMP packet which quotes an IP packet with IP options\n");
+				continue;
+			}
 
 			if (old_ip_hdr->ip_dst.s_addr != dst_ip)
 			{
