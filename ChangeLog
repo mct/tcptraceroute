@@ -1,11 +1,18 @@
+Version 1.5beta3 (2003-06-01)
+
+    Added some additional AC_CHECK_LIB lines to the configure.ac file,
+    required for Solaris systems, by Petter Reinholdtsen <pere@hungry.com>.
+
+    Fixed a number of type warnings under non-gcc compilers by adding a few
+    casts; reported by Petter Reinholdtsen <pere@hungry.com>.
+
 Version 1.5beta2 (2003-05-25)
 
-    Added an autoconf check to detect MacOS X systems by looking to
-    see if __APPLE__ and __MACH__ are defined.  Also added an autoconf
-    configure command line argument --enable-noselect-default to control
-    the default behavior of the tcptraceroute --noselect command line
-    argument, and enabled it by default on MacOS X systems if not
-    otherwise specified.
+    Added an autoconf check to detect MacOS X systems by looking to see if
+    __APPLE__ and __MACH__ are defined.  Also added an autoconf configure
+    command line argument --enable-noselect-default to control the default
+    behavior of the tcptraceroute --noselect command line argument, and
+    enabled it by default on MacOS X systems if not otherwise specified.
 
 Version 1.5beta1 (2003-05-24)
 
@@ -159,3 +166,5 @@ Version 1.1 (2001-06-30)
 Version 1.0 (2001-04-10)
 
     Initial Release.
+
+# vim:set ts=4 sw=4 tw=75 ai:

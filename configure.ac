@@ -6,6 +6,7 @@
 AC_PREREQ(2.57)
 
 AC_INIT(tcptraceroute)
+AC_CANONICAL_SYSTEM
 AM_INIT_AUTOMAKE(tcptraceroute, `cat VERSION`)
 AC_CONFIG_SRCDIR(tcptraceroute.c)
 AM_CONFIG_HEADER(config.h)
@@ -19,7 +20,10 @@ fi
 AC_PROG_INSTALL
 
 # Checks for libraries.
+AC_CHECK_LIB(nsl, gethostbyname)
 AC_CHECK_LIB(socket, socket)
+AC_CHECK_LIB(inet, connect)
+AC_CHECK_LIB(resolv, inet_aton)
 
 AC_ARG_WITH(libpcap, AC_HELP_STRING([--with-libpcap=DIR], [use libpcap in DIR]),
 	[

@@ -27,7 +27,7 @@
  * Updates are available from http://michael.toren.net/code/tcptraceroute/
  */
 
-#define BANNER  "Copyright (c) 2001, 2002, 2003 Michael C. Toren <mct@toren.net>\n\
+#define BANNER "Copyright (c) 2001, 2002, 2003 Michael C. Toren <mct@toren.net>\n\
 Updates are available from http://michael.toren.net/code/tcptraceroute/\n"
 
 /*
@@ -481,7 +481,7 @@ char *iptohost(u_long in)
 		return iptos(in);
 	}
 
-	return libnet_addr2name4(in,
+	return (char *)libnet_addr2name4(in,
 		o_numeric > 0 ? LIBNET_DONT_RESOLVE : LIBNET_RESOLVE);
 }
 
@@ -492,9 +492,11 @@ char *iptohost(u_long in)
  */
 
 #if (LIBNET_API_VERSION < 110)
-#define hosttoip(hostname, numeric) libnet_name_resolve(hostname, numeric)
+#define hosttoip(hostname, numeric) \
+	libnet_name_resolve((u_char *)hostname, numeric)
 #else
-#define hosttoip(hostname, numeric) libnet_name2addr4(libnet_context, hostname, numeric)
+#define hosttoip(hostname, numeric) \
+	libnet_name2addr4(libnet_context, (u_char *)hostname, numeric)
 #endif
 
 /*
@@ -1170,7 +1172,7 @@ void probe(proberecord *record, int ttl, int q)
 		for(i = 0; i < o_pktlen; i++)
 			payload[i] = i % ('~' - '!') + '!';
 
-		debug("Payload: %s\n", sprintable(payload));
+		debug("Payload: %s\n", sprintable((char *)payload));
 	}
 
 	/* Set some values of the probe record */
