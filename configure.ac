@@ -98,7 +98,9 @@ AC_COMPILE_IFELSE(
 
 # Checks for library functions.
 AC_FUNC_MALLOC
-AC_FUNC_REALLOC
+# AC_FUNC_REALLOC	# our tcptraceroute.c:xrealloc() function deals with 
+					# the realloc(0,0) case, and AC_FUNC_REALLOC doesn't
+					# appear to break on IRIX systems.
 AC_FUNC_SELECT_ARGTYPES
 AC_FUNC_VPRINTF
 AC_CHECK_FUNCS([gettimeofday memset select socket strchr])

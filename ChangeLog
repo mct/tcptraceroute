@@ -1,3 +1,20 @@
+Version 1.5beta4 (2003-06-29)
+
+    A call to seteuid() has been replaced with a call to setuid() to fully
+    drop root privileges.  As there are currently no known exploitable
+    portions of tcptraceroute, older versions are still believed to be
+    safe even without fully dropping privileges, however users are still
+    encouraged to upgrade to provide a measure of containment in the event
+    that an exploitable flaw is discovered in the future.  Reported by
+    David Coe <davidc@debian.org> and Matt Zimmerman <mdz@debian.org>,
+    and published in Debian Security Advisory DSA 330-1.
+
+    AC_FUNC_REALLOC was commented out of configure.ac, which was failing on
+    IRIX badly systems.  The xrealloc() function in tcptraceroute already
+    works around the realloc(0,0) case that AC_FUNC_REALLOC is attempting
+    to prevent against, anyway.  Reported by Petter Reinholdtsen
+    <pere@hungry.com>.
+
 Version 1.5beta3 (2003-06-01)
 
     Added some additional AC_CHECK_LIB lines to the configure.ac file,

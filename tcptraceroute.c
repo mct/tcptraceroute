@@ -1995,7 +1995,7 @@ int main(int argc, char **argv)
 	initlibnet();
 	defaults();
 	initcapture();
-	seteuid(getuid());
+	setuid(getuid());
 	exitcode = trace();
 #if (LIBNET_API_VERSION >= 110)
 	libnet_destroy(libnet_context);

@@ -121,3 +121,56 @@ odc-t.ankara.af.mil, a firewalled mail server:
     17  198.26.165.18 (198.26.165.18)  485.771 ms
     18  odctfw.ankara.af.mil (207.133.163.161)  443.782 ms
     19  odc-t.ankara.af.mil (207.133.163.7) [open]  745.611 ms
+
+
+
+
+tcptraceroute-1.3beta1 added support for controlling the SYN and ACK
+flags used in outgoing probe packets through the -S and -A command line
+arguments.  By utilizing probe packets with the ACK bit set, it is
+possible to traceroute to hosts located behind stateless firewalls that
+block all inbound TCP connections, but permit those hosts to establish
+outbound connections.  Below are two examples of such behavior,
+recorded on August 15th, 2001.
+
+ -- Michael C. Toren <mct@toren.net>  Sun, 29 Jun 2003 17:18:41 -0400
+
+
+Tracing to a host protected by a Linux 2.2 ipchains firewall:
+
+    [mct@quint ~]$ tcptraceroute -f7 -q1 argo.starforce.com
+    Selected device eth0, address 207.8.132.210, port 3738 for outgoing packets
+    Tracing the path to argo.starforce.com (216.158.56.82) on TCP port 80 (www), 30 hops max
+     7  voicenet-gw.core-1-hssi-6-0-0-50.oldcity.dca.net (207.103.28.30)  69.252 ms
+     8  node-150-eth3-0-local.oldcity.dca.net (207.245.82.150)  16.216 ms
+     9  *
+    10  *
+    11  *
+
+    [mct@quint ~]$ tcptraceroute -f7 -q1 -A argo.starforce.com
+    Selected device eth0, address 207.8.132.210, port 3747 for outgoing packets
+    Tracing the path to argo.starforce.com (216.158.56.82) on TCP port 80 (www), 30 hops max
+     7  voicenet-gw.core-1-hssi-6-0-0-50.oldcity.dca.net (207.103.28.30)  11.030 ms
+     8  node-150-eth3-0-local.oldcity.dca.net (207.245.82.150)  24.488 ms
+     9  argo.starforce.com (216.158.56.82) [closed]  1514.142 ms
+
+Tracing to falkland, a host behind jumpgate, a Cisco router with the
+following access-list:
+
+    access-list 100 permit tcp any any established
+    access-list 100 deny   ip any any
+
+
+    [mct@quint ~]$ tcptraceroute -q1 falkland
+    Selected device eth0, address 207.8.132.210, port 3771 for outgoing packets
+    Tracing the path to falkland (207.106.130.86) on TCP port 80 (www), 30 hops max
+     1  jumpgate.netisland.net (207.106.130.81) 2.111 ms
+     2  *
+     3  *
+     4  *
+
+    [mct@quint ~]$ tcptraceroute -q1 -A falkland
+    Selected device eth0, address 207.8.132.210, port 3773 for outgoing packets
+    Tracing the path to falkland (207.106.130.86) on TCP port 80 (www), 30 hops max
+     1  jumpgate.netisland.net (207.106.130.81) 2.044 ms
+     2  falkland.netisland.net (207.106.130.86) [closed]  4.635 ms
