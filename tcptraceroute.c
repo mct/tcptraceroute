@@ -30,14 +30,14 @@
  * Updates are available from http://michael.toren.net/code/tcptraceroute/
  */
 
-#define VERSION "tcptraceroute 1.3beta5 (2001-12-14)"
+#define VERSION "tcptraceroute 1.3beta6 (2001-12-15)"
 #define BANNER  "Copyright (c) 2001, Michael C. Toren <mct@toren.net>\n\
 Updates are available from http://michael.toren.net/code/tcptraceroute/\n"
 
 /*
  * Revision history:
  *
- *	Version 1.3beta5 (2001-12-14)
+ *	Version 1.3beta6 (2001-12-15)
  *
  *		probe() and capture() now use a new proberecord structure which
  *		contains information about each probe in a modularized way.
@@ -688,7 +688,7 @@ void getinterfaces(void)
 
 		/* ... and fill it in */
 		p->addr = addr;
-		p->name = xrealloc(NULL, sizeof(ifr.ifr_name + 1));
+		p->name = xrealloc(NULL, strlen(ifr.ifr_name) + 1);
 		strcpy(p->name, ifr.ifr_name);
 
 		debug("Discovered interface %s with address %s\n",
