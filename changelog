@@ -3,7 +3,7 @@ Extracted from tcptraceroute.c:
 /*
  * Revision history:
  *
- *  Version 1.3beta4 (2001-12-01)
+ *  Version 1.3beta5 (2001-12-14)
  *
  *      probe() and capture() now use a new proberecord structure which
  *      contains information about each probe in a modularized way.

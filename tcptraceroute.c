@@ -30,14 +30,14 @@
  * Updates are available from http://michael.toren.net/code/tcptraceroute/
  */
 
-#define VERSION "tcptraceroute 1.3beta4 (2001-12-01)"
+#define VERSION "tcptraceroute 1.3beta5 (2001-12-14)"
 #define BANNER  "Copyright (c) 2001, Michael C. Toren <mct@toren.net>\n\
 Updates are available from http://michael.toren.net/code/tcptraceroute/\n"
 
 /*
  * Revision history:
  *
- *	Version 1.3beta4 (2001-12-01)
+ *	Version 1.3beta5 (2001-12-14)
  *
  *		probe() and capture() now use a new proberecord structure which
  *		contains information about each probe in a modularized way.
@@ -374,18 +374,15 @@ void *xrealloc(void *oldp, int size)
 	void *p;
 
 	if (!oldp)
-	{
 		/* Kludge for SunOS, which doesn't allow realloc on a NULL pointer */
-		oldp = malloc(1);
-		if (!oldp)
-			fatal("Out of memory!  Could not allocate 1 byte!\n");
-	}
-
-	p = realloc(oldp, size);
-
+		p = malloc(size);
+	else
+		p = realloc(oldp, size);
+	
 	if (!p)
 		fatal("Out of memory!  Could not reallocate %d bytes!X\n", size);
-
+	
+	memset(p, 0, size);
 	return p;
 }
 
@@ -541,6 +538,35 @@ char *iptohost(u_long in)
 	}
 
 	return libnet_host_lookup(in, o_numeric > 0 ? 0 : 1);
+}
+
+/*
+ * Allocates memory for a new proberecord structure.
+ */
+
+proberecord *newproberecord(void)
+{
+	proberecord *record;
+
+	record = xrealloc(NULL, sizeof(proberecord));
+	record->state = xrealloc(NULL, TEXTSIZE);
+	record->string = xrealloc(NULL, TEXTSIZE);
+	return record;
+}
+
+/*
+ * Destroys a proberecord structure, carefully, as not to leak memory.
+ */
+
+void freeproberecord(proberecord *record)
+{
+	if (record->string)
+		free(record->string);
+
+	if (record->state)
+		free(record->state);
+
+	free(record);
 }
 
 /*
@@ -846,8 +872,8 @@ void showprobe(proberecord *record)
 	}
 
 	/* tcp state */
-	if ( ((record->ttl != lastttl) && record->state) ||
-		((record->ttl == lastttl) && record->state && (strncmp(laststate, record->state, TEXTSIZE) != 0)))
+	if ( ((record->ttl != lastttl) && *(record->state)) ||
+		((record->ttl == lastttl) && *(record->state) && (strncmp(laststate, record->state, TEXTSIZE) != 0)))
 	{
 		printf(" [%s]", record->state);
 	}
@@ -863,7 +889,7 @@ void showprobe(proberecord *record)
 	}
 
 	if (record->addr == INADDR_ANY)
-		record->string = "*";
+		safe_strncpy(record->string, "*", TEXTSIZE);
 	
 	if (! record->string)
 		fatal("something bad happened\n");
@@ -875,7 +901,7 @@ void showprobe(proberecord *record)
 
 	lastttl = record->ttl;
 	lastaddr = record->addr;
-	if (record->state)
+	if (*(record->state))
 		safe_strncpy(laststate, record->state, TEXTSIZE);
 
 	/* kludge to make debug mode usable */
@@ -1027,6 +1053,9 @@ void defaults(void)
 		fatal("Minimum TTL (%d) must be less than maximum TTL (%d)\n",
 			o_minttl, o_maxttl);
 
+	if (o_nqueries <= 0)
+		fatal("Number of queries must be at least 1\n");
+
 	if (o_timeout <= 0)
 		fatal("Timeout must be at least 1\n");
 
@@ -1143,20 +1172,9 @@ void probe(proberecord *record, int ttl, int q)
 		debug("Payload: %s\n", sprintable(payload));
 	}
 
-	/*
-	 * Initialize the new proberecord structure
-	 *
-	 * TODO: If we're going to be sending out more than one probe at once,
-	 * which is the eventual goal of all the proberecord structure stuff, we
-	 * really should be generating a long list of id's to use early on, and
-	 * check while they're being generated if there are any duplicates.
-	 */
-
 	record->q = q;
 	record->ttl = ttl;
 	record->addr = INADDR_ANY;
-	record->state = NULL;
-	record->string = NULL;
 	record->src_prt = src_prt;
 	record->id = allocateid();
 	record->delta = 0;
@@ -1223,6 +1241,7 @@ int capture(proberecord *record)
 	struct libnet_icmp_hdr *icmp_hdr;
 	struct timeval start, now, timepassed, timeout_tv, timeleft;
 	int pcap_fd, firstpass, ret, len;
+	double delta;
 	fd_set sfd;
 
 	firstpass = 1;
@@ -1315,7 +1334,7 @@ int capture(proberecord *record)
 		if (gettimeofday(&now, NULL) < 0)
 			pfatal("gettimeofday");
 
-		record->delta = (double)(now.tv_sec - record->timestamp.tv_sec) * 1000 +
+		delta = (double)(now.tv_sec - record->timestamp.tv_sec) * 1000 +
 			(double)(now.tv_usec - record->timestamp.tv_usec) / 1000;
 
 		if (ip_hdr->ip_p == IPPROTO_ICMP)
@@ -1429,24 +1448,26 @@ int capture(proberecord *record)
 						safe_snprintf(s, TEXTSIZE, "!<%d>", icmp_hdr->icmp_code);
 				}
 
+				record->delta = delta;
 				record->addr = ip_hdr->ip_src.s_addr;
-				record->string = xrealloc(NULL, TEXTSIZE);
 				safe_snprintf(record->string, TEXTSIZE, "%%.3f ms %s", s);
 				return 1;
 			}
 
 			if (icmp_hdr->icmp_type == ICMP_TIMXCEED)
 			{
+				record->delta = delta;
 				record->addr = ip_hdr->ip_src.s_addr;
-				record->string = "%.3f ms";
+				safe_strncpy(record->string, "%.3f ms", TEXTSIZE);
 				return 0;
 			}
 
 			if (icmp_hdr->icmp_type != ICMP_TIMXCEED &&
 				icmp_hdr->icmp_type != ICMP_UNREACH)
 			{
+				record->delta = delta;
 				record->addr = ip_hdr->ip_src.s_addr;
-				record->string = "%.3f ms -- Unexpected ICMP";
+				safe_strncpy(record->string, "%.3f ms -- Unexpected ICMP", TEXTSIZE);
 				return 0;
 			}
 
@@ -1490,19 +1511,17 @@ int capture(proberecord *record)
 				continue;
 			}
 
-			record->state = xrealloc(NULL, TEXTSIZE);
-
 			if (tcp_hdr->th_flags & TH_RST)
-				safe_snprintf(record->state, TEXTSIZE, "closed");
+				safe_strncpy(record->state, "closed", TEXTSIZE);
 
 			else if ((tcp_hdr->th_flags & TH_SYN)
 					&& (tcp_hdr->th_flags & TH_ACK)
 					&& (tcp_hdr->th_flags & TH_ECN))
-				safe_snprintf(record->state, TEXTSIZE, "open, ecn");
+				safe_strncpy(record->state, "open, ecn", TEXTSIZE);
 
 			else if ((tcp_hdr->th_flags & TH_SYN)
 					&& (tcp_hdr->th_flags & TH_ACK))
-				safe_snprintf(record->state, TEXTSIZE, "open");
+				safe_strncpy(record->state, "open", TEXTSIZE);
 
 			else
 				safe_snprintf(record->state, TEXTSIZE, "unknown,%s%s%s%s%s%s%s%s%s",
@@ -1516,8 +1535,9 @@ int capture(proberecord *record)
 					tcp_hdr->th_flags & TH_ECN  ? " ECN" : "",
 					tcp_hdr->th_flags ? "" : " no flags");
 
+			record->delta = delta;
 			record->addr = ip_hdr->ip_src.s_addr;
-			record->string = "%.3f ms";
+			safe_strncpy(record->string, "%.3f ms", TEXTSIZE);
 			return 1;
 		}
 
@@ -1541,7 +1561,7 @@ void trace(void)
 	{
 		for (q = 1; q <= o_nqueries; q++)
 		{
-			record = xrealloc(NULL, sizeof(proberecord));
+			record = newproberecord();
 			probe(record, ttl, q);
 
 			debug("Sent probe %d of %d for hop %d, IP ID %d, source port %d, %s%s%s\n",
@@ -1553,7 +1573,7 @@ void trace(void)
 			done += capture(record);
 
 			showprobe(record);
-			free(record);
+			freeproberecord(record);
 		}
 	}
 
