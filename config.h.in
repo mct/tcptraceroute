@@ -6,6 +6,9 @@
 /* Define to 1 if you have the <arpa/inet.h> header file. */
 #undef HAVE_ARPA_INET_H
 
+/* Is this a BSDI system? */
+#undef HAVE_BSDI
+
 /* Define to 1 if you don't have `vprintf' but do have `_doprnt.' */
 #undef HAVE_DOPRNT
 
@@ -39,8 +42,7 @@
 /* Is this a MacOS X system? */
 #undef HAVE_MACOSX
 
-/* Define to 1 if your system has a GNU libc compatible `malloc' function, and
-   to 0 otherwise. */
+/* Define to 1 if your system has a working `malloc' function. */
 #undef HAVE_MALLOC
 
 /* Define to 1 if you have the <memory.h> header file. */
@@ -48,6 +50,9 @@
 
 /* Define to 1 if you have the `memset' function. */
 #undef HAVE_MEMSET
+
+/* Is this a NetBSD system? */
+#undef HAVE_NETBSD
 
 /* Define to 1 if you have the <netdb.h> header file. */
 #undef HAVE_NETDB_H
@@ -150,6 +155,3 @@
 
 /* Version number of package */
 #undef VERSION
-
-/* Define to rpl_malloc if the replacement function should be used. */
-#undef malloc

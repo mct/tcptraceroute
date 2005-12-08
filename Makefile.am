@@ -1,5 +1,5 @@
 bin_PROGRAMS = tcptraceroute
-tcptraceroute_SOURCES = tcptraceroute.c
+tcptraceroute_SOURCES = main.c datalink.c util.c probe.c capture.c
 man_MANS = tcptraceroute.1
 
 docdir = $(datadir)/doc/tcptraceroute

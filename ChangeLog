@@ -1,3 +1,31 @@
+Version 1.5beta6 (2005-01-03)
+
+    New --dnat, --no-dnat (default), and --no-dnat-strict command line
+    arguments.  --dnat enabled Destination NAT detection, which works by
+    comparing the quoted IP address in an ICMP payload with the
+    destination a probe packet was addressed to.
+
+    Numeric IP address in parenthesis is now only displayed if the content
+    in the parenthesis is different than the non-parenthesized content,
+    making the output less busy.
+
+    The SYN ISN (Initial Sequence Number) now set to a random 32bit value;
+    previously had always been zero.
+
+    Added missing htons() call around the arguments to getservbyport(),
+    which resulted in the destination port service name not being correctly
+    reported on some architectures, by Dmitry Karasik <dimakar@yahoo.com>
+
+    Improved the configure.ac so that it is less likely to link against
+    unnecessary libraries by "Dmitry V. Levin" <ldv@altlinux.org>
+
+    --no-select is now the default under NetBSD, based on a report and data
+    collected by Ed Ravin <eravin@panix.com>.
+
+    Split the tcptraceroute.c file into main.c, datalink.c, probe.c,
+    capture.c, util.c, and a number of include files, which should make
+    things much more manageable.
+
 Version 1.5beta5 (2003-07-02)
 
     Now functions properly with libpcap when using an interface without a
@@ -7,7 +35,7 @@ Version 1.5beta5 (2003-07-02)
     Improved autoconf handling of the --with-libpcap= command line argument,
     by Richard van den Berg <richard@vdberg.org>.
 
-    Moved the tcptraceroute man page from section 1 to section 8 now that
+    Moved the tcptraceroute man page to section 1 from section 8 now that
     tcptraceroute is installed in /usr/bin by default, as suggested by
     James Ralston <ralston@pobox.com>.
 
