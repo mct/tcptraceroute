@@ -174,3 +174,76 @@ following access-list:
     Tracing the path to falkland (207.106.130.86) on TCP port 80 (www), 30 hops max
      1  jumpgate.netisland.net (207.106.130.81) 2.044 ms
      2  falkland.netisland.net (207.106.130.86) [closed]  4.635 ms
+
+
+Another example of tracing to a host protected by a stateless firewall, which
+permits hosts behind it to make outbound TCP connections:
+
+    [mct@ellesmere ~]$ tcptraceroute -q1 -f9 uunet1.fe.weather.com
+    Selected device eth0, address 209.163.107.174, port 35833 for outgoing packets
+    Tracing the path to uunet1.fe.weather.com (63.111.66.2) on TCP port 80 (www), 30 hops max
+     9  0.so-3-1-0.XL2.ATL5.ALTER.NET (152.63.0.238)  32.925 ms
+    10  0.so-7-0-0.XR2.ATL5.ALTER.NET (152.63.85.194)  32.765 ms
+    11  110.at-5-1-0.WR1.ATL5.ALTER.NET (152.63.3.58)  32.941 ms
+    12  pos6-0.ur1.atl7.web.wcom.net (157.130.216.50)  32.781 ms
+    13  198.5.128.134  32.802 ms
+    14  *
+    15  *
+    16  *
+    
+    [mct@ellesmere ~]$ tcptraceroute -q1 -f9 -A uunet1.fe.weather.com
+    Selected device eth0, address 209.163.107.174, port 35834 for outgoing packets
+    Tracing the path to uunet1.fe.weather.com (63.111.66.2) on TCP port 80 (www), 30 hops max
+     9  0.so-3-1-0.XL2.ATL5.ALTER.NET (152.63.0.238)  32.704 ms
+    10  0.so-7-0-0.XR2.ATL5.ALTER.NET (152.63.85.194)  32.665 ms
+    11  110.at-5-1-0.WR1.ATL5.ALTER.NET (152.63.3.58)  32.996 ms
+    12  pos6-0.ur1.atl7.web.wcom.net (157.130.216.50)  32.779 ms
+    13  198.5.128.134  33.122 ms
+    14  uunet1.fe.weather.com (63.111.66.2) [closed]  33.399 ms
+
+
+
+
+tcptraceroute-1.5beta6 added the --dnat detection support, to detect
+DNAT devices which do not correctly rewrite the IP address of the IP
+packets quoted in ICMP time-exceeded messages tcptraceroute solicits,
+revealing the destination IP address an outbound probe packet was NATed
+to.  Below are examples of using --dnat to determine the IP address our
+probe packets are being NATed to, recorded on March 28th, 2006.
+
+ -- Michael C. Toren <mct@toren.net>  Tue, 28 Mar 2006 23:40:54 -0500
+
+
+    [mct@ellesmere ~]$ tcptraceroute -q1 -f5 --track-port --dnat pages.ebay.com
+    Selected device eth0, address 209.163.107.174 for outgoing packets
+    Tracing the path to pages.ebay.com (66.135.192.87) on TCP port 80 (www), 30 hops max
+     5  equinix-chaz.coretel.net (209.163.107.121)  5.288 ms
+     6  gsr12012.ash.he.net (206.223.137.132)  5.610 ms
+     7  pos3-3.gsr12416.pao.he.net (216.218.254.205)  88.611 ms
+     8  pao1-br01.net.ebay.com (198.32.176.56)  88.637 ms
+     9  10.6.1.133  90.605 ms
+    10  ge2-7-snv1-xr01.net.ebay.com (66.135.207.54)  91.667 ms
+    11  10.6.1.74  92.471 ms
+          Detected DNAT to 10.6.35.86
+    12  10.6.105.8  91.187 ms
+    13  pages.ebay.com (66.135.192.87) [open]  91.908 ms
+
+
+    [mct@ellesmere ~]$ tcptraceroute -q1 -f8 --dnat magicpipe.no-ip.com 22
+    Selected device eth0, address 209.163.107.174, port 40857 for outgoing packets
+    Tracing the path to magicpipe.no-ip.com (69.142.94.59) on TCP port 22 (ssh), 30 hops max
+     8  tbr2-cl15.n54ny.ip.att.net (12.122.10.53)  12.965 ms
+     9  gar7-p390.n54ny.ip.att.net (12.123.3.85)  79.347 ms
+    10  12.118.102.22  12.430 ms
+    11  te-8-1-ar01.plainfield.nj.panjde.comcast.net (68.86.211.1)  12.425 ms
+    12  po80-ar01.audubon.nj.panjde.comcast.net (68.86.208.2)  14.968 ms
+    13  po10-ar01.wallingford.pa.panjde.comcast.net (68.86.208.26)  16.521 ms
+    14  po90-ur02.wallingford.pa.panjde.comcast.net (68.86.208.189)  16.356 ms
+    15  *
+          Detected DNAT to 192.168.1.100
+    16  c-69-142-94-59.hsd1.pa.comcast.net (69.142.94.59)  24.674 ms
+    17  c-69-142-94-59.hsd1.pa.comcast.net (69.142.94.59) [open]  25.230 ms
+
+        (The timeout on the 15th hop is normal behavior on Comcast's
+         network, and is unrelated to tcptraceroute.)
+

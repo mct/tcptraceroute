@@ -17,7 +17,8 @@ build-stamp:
 	dh_testdir
 
 	# Add here commands to compile the package.
-	$(MAKE) tcptraceroute
+	./configure --prefix=`pwd`/debian/tmp/usr
+	$(MAKE)
 	touch build-stamp
 
 clean:
@@ -37,7 +38,7 @@ install: build
 	dh_installdirs
 
 	# Add here commands to install the package into debian/tmp.
-	$(MAKE) install DESTDIR=`pwd`/debian/tmp/usr/bin/
+	$(MAKE) install
 
 
 # Build architecture-independent files here.
@@ -60,7 +61,7 @@ binary-arch: build install
 	dh_installmanpages
 	dh_installinfo
 #	dh_undocumented
-	dh_installchangelogs changelog
+	dh_installchangelogs
 	dh_link
 ifeq (,$(findstring nostrip,$(DEB_BUILD_OPTIONS)))
 	dh_strip

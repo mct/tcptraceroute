@@ -3,7 +3,7 @@
 
 /*
  * tcptraceroute -- A traceroute implementation using TCP packets
- * Copyright (c) 2001-2005  Michael C. Toren <mct@toren.net>
+ * Copyright (c) 2001-2006  Michael C. Toren <mct@toren.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License, version 2, as published
@@ -61,6 +61,11 @@ void initcapture(void)
 		fatal("pcap_setfilter failed\n");
 
 	pcap_fd = pcap_fileno(pcap);
+
+	if (pcap_fd > 100)
+		fatal("Sorry, pcap_fd (%d) is too high.  Why are there so many open file descriptors?\n",
+			pcap_fd);
+
 	if (fcntl(pcap_fd, F_SETFL, O_NONBLOCK) < 0)
 		pfatal("fcntl(F_SETFL, O_NONBLOCK) failed");
 
@@ -180,7 +185,7 @@ int capture(proberecord *record)
 
 		if (len > SNAPLEN)
 		{
-			debug("Packet received is larger than our snaplen?  Ignoring\n", SNAPLEN);
+			debug("Packet received is larger than our snaplen (%d)?  Ignoring\n", SNAPLEN);
 			continue;
 		}
 

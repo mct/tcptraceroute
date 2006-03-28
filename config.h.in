@@ -42,7 +42,8 @@
 /* Is this a MacOS X system? */
 #undef HAVE_MACOSX
 
-/* Define to 1 if your system has a working `malloc' function. */
+/* Define to 1 if your system has a GNU libc compatible `malloc' function, and
+   to 0 otherwise. */
 #undef HAVE_MALLOC
 
 /* Define to 1 if you have the <memory.h> header file. */
@@ -155,3 +156,6 @@
 
 /* Version number of package */
 #undef VERSION
+
+/* Define to rpl_malloc if the replacement function should be used. */
+#undef malloc

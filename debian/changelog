@@ -1,3 +1,9 @@
+tcptraceroute (1.5beta7-0sarge1) stable; urgency=low
+
+  * New upstream beta version.
+
+ -- Michael C. Toren <mct@toren.net>  Thu,  6 Jan 2005 11:39:00 -0500
+
 tcptraceroute (1.4-0woody1) stable; urgency=low
 
   * New upstream version.

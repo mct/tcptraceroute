@@ -1,3 +1,17 @@
+Version 1.5beta7 (2006-03-28)
+
+    Added check to ensure pcap_fd is within the range of select(2) to
+    avoid any potential FD_SET overflows, by Shaun Colley <shaun@rsc.cx>
+
+    Rebuilt autoconf files with a more recent version of autoconf from a
+    Debian Sarge system, to resolve Debian Bug#333827.
+
+    Updated the man page and examples.txt files to document the new --dnat
+    detection features.
+
+    Updated the (unofficial) debian/control file to build-depend on
+    libnet1-dev rather than libnet0-dev.
+
 Version 1.5beta6 (2005-01-03)
 
     New --dnat, --no-dnat (default), and --no-dnat-strict command line
@@ -232,4 +246,4 @@ Version 1.0 (2001-04-10)
 
     Initial Release.
 
-# vim:set ts=4 sw=4 tw=75 ai:
+# vim:set ts=4 sw=4 tw=75 ai syntax=off:
