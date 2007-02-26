@@ -6,7 +6,7 @@
 
 use strict;
 
-my $tcptra = shift || "tcptraceroute";
+my $tcptra = shift || "./tcptraceroute";
 my $host = shift || "michael.toren.net";
 my $loopback = shift || "127.0.0.1";
 
