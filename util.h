@@ -34,7 +34,7 @@
 	libnet_name_resolve((u_char *)hostname, numeric)
 #else
 #define hosttoip(hostname, numeric) \
-	libnet_name2addr4(libnet_context, (u_char *)hostname, numeric)
+	libnet_name2addr4(libnet_context, (char *)hostname, numeric)
 #endif
 
 void fatal(char *, ...);

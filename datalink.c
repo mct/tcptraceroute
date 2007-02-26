@@ -281,7 +281,8 @@ void getinterfaces(void)
 u_long findsrc(u_long dest)
 {
 	struct sockaddr_in sinsrc, sindest;
-	int s, size;
+	int s;
+	unsigned int size;
 
 	if ((s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0)
 		pfatal("socket error");

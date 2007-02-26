@@ -80,7 +80,8 @@ void freeproberecord(proberecord *record)
 u_short allocateport(u_short requested)
 {
 	struct sockaddr_in in;
-	int	s, insize;
+	int s;
+	unsigned int insize;
 
 	if ((s = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
 		pfatal("socket error");
