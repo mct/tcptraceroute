@@ -5,10 +5,11 @@
 # Initialization.
 AC_PREREQ(2.50)
 
-AC_INIT(tcptraceroute)
-AC_CANONICAL_SYSTEM
-AM_INIT_AUTOMAKE(tcptraceroute, `cat VERSION`)
+AC_INIT(tcptraceroute, `cat VERSION`)
 AC_CONFIG_SRCDIR(main.c)
+AC_CANONICAL_SYSTEM
+AM_INIT_AUTOMAKE
+
 AM_CONFIG_HEADER(config.h)
 
 # Checks for programs.
