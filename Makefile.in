@@ -334,7 +334,7 @@ dist-all: distdir
 distdir: $(DISTFILES)
 	-rm -rf $(distdir)
 	mkdir $(distdir)
-	-chmod 777 $(distdir)
+	-chmod 755 $(distdir)
 	here=`cd $(top_builddir) && pwd`; \
 	top_distdir=`cd $(distdir) && pwd`; \
 	distdir=`cd $(distdir) && pwd`; \

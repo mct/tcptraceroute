@@ -3,7 +3,7 @@
 
 /*
  * tcptraceroute -- A traceroute implementation using TCP packets
- * Copyright (c) 2001-2006  Michael C. Toren <mct@toren.net>
+ * Copyright (c) 2001-2015  Michael C. Toren <mct@toren.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License, version 2, as published
@@ -46,7 +46,7 @@
 #include "config.h"
 #endif
 
-#define BANNER "Copyright (c) 2001-2006 Michael C. Toren <mct@toren.net>\n\
+#define BANNER "Copyright (c) 2001-2015 Michael C. Toren <mct@toren.net>\n\
 Updates are available from http://michael.toren.net/code/tcptraceroute/\n"
 
 /* Buffer size used for a number of strings, including the pcap filter */
