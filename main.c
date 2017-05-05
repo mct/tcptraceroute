@@ -408,8 +408,8 @@ int main(int argc, char **argv)
 			case 'd':
 				o_debug++;
 				debug("%s %s, %s\n", PACKAGE, VERSION, TARGET);
-				debug("Compiled with libpcap %s, libnet %s (API %d)\n",
-					pcap_version, LIBNET_VERSION, LIBNET_API_VERSION);
+				debug("Compiled with %s; libnet %s (API %d)\n",
+					pcap_lib_version(), LIBNET_VERSION, LIBNET_API_VERSION);
 				break;
 
 			case 'n':
