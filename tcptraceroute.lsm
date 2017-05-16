@@ -6,7 +6,7 @@ Description:	A traceroute implementation using TCP packets
 Keywords:	network, traceroute, firewall
 Author:		mct@toren.net (Michael C. Toren)
 Maintained-by:	mct@toren.net (Michael C. Toren)
-Primary-site:	http://michael.toren.net/code/tcptraceroute/
+Primary-site:	https://github.com/mct/tcptraceroute
 Platforms:	Requires libnet and libpcap
 Copying-policy:	GPL
 End

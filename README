@@ -1,7 +1,7 @@
 tcptraceroute -- A traceroute implementation using TCP packets
 Copyright (c) 2001-2015  Michael C. Toren <mct@toren.net>
 
-Updates are available from <http://michael.toren.net/code/tcptraceroute/>
+Updates are available from <https://github.com/mct/tcptraceroute>
 
 Requires libnet <http://www.packetfactory.net/libnet> and libpcap
 <http://www.tcpdump.org/>.  For compilation instructions, see the

@@ -47,7 +47,7 @@
 #endif
 
 #define BANNER "Copyright (c) 2001-2015 Michael C. Toren <mct@toren.net>\n\
-Updates are available from http://michael.toren.net/code/tcptraceroute/\n"
+Updates are available from https://github.com/mct/tcptraceroute\n"
 
 /* Buffer size used for a number of strings, including the pcap filter */
 #define TEXTSIZE	1024
