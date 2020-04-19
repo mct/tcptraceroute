@@ -69,12 +69,14 @@ void defaults(void)
 	if (device == NULL)
 	{
 		/* couldn't find an appropriate interface */
-		warn("Could not determine appropriate device; resorting to pcap_lookupdev()\n");
-		device = pcap_lookupdev(errbuf);
+		warn("Could not determine appropriate device; resorting to pcap_findalldevs()\n");
+		pcap_if_t *interfaces;
+		if (pcap_findalldevs(&interfaces, errbuf) == 0)
+			device = interfaces[0].name;
 	}
 
 	if (device == NULL)
-		fatal("Could not determine device via pcap_lookupdev(): %\n", errbuf);
+		fatal("Could not determine device via pcap_findalldevs(): %\n", errbuf);
 
 	if ((pcap = pcap_open_live(device, 0, 0, 0, errbuf)) == NULL)
 		fatal("error opening device %s: %s\n", device, errbuf);

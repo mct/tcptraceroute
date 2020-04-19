@@ -1,5 +1,7 @@
+.ccls-cache/
 .deps/
 Makefile
+compile_commands.json
 config.h
 config.log
 config.status
