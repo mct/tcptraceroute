@@ -128,6 +128,39 @@ u_short allocateid(void)
 	return ids[n++];
 }
 
+static int set_options_payload(uint8_t *payload,uint32_t timeval,uint16_t mss)
+{
+    int len = 0;
+    
+    //set mss value
+    payload[len++] = 0x02;
+    payload[len++] = 0x04;
+    payload[len++] = (uint8_t)((mss >> 8) & 0xFF);
+    payload[len++] = (uint8_t)(mss & 0xFF);
+    
+    //set SACK
+    payload[len++] = 0x04;
+    payload[len++] = 0x02;
+    
+    //set timeval
+    payload[len++] = 0x08;
+    payload[len++] = 0x0a;
+    payload[len++] = (uint8_t)((timeval >> 24) & 0xFF);
+    payload[len++] = (uint8_t)((timeval >> 16) & 0xFF);
+    payload[len++] = (uint8_t)((timeval >> 8) & 0xFF);
+    payload[len++] = (uint8_t)(timeval & 0xFF);
+    len+=4;
+    
+    //set NOP
+    payload[len++] = 0x01;
+    
+    //set Window scale
+    payload[len++] = 0x03;
+    payload[len++] = 0x03;
+    payload[len] = 0x07;    
+    return 0;
+}
+
 /*
  * Sends out a TCP SYN packet with the specified TTL, and returns a
  * proberecord structure describing the packet sent, so we know what
@@ -139,11 +172,12 @@ void probe(proberecord *record, int ttl, int q)
 {
 	static u_char *payload;
 	int i, size, ret;
+	uint8_t opt_payload[20] = {0x00};
 
 #if (LIBNET_API_VERSION < 110)
 	static u_char *buf;
 #else
-	static libnet_ptag_t ip_tag, tcp_tag, data_tag;
+	static libnet_ptag_t ip_tag, tcp_tag, data_tag, tcp_op_tag;
 #endif
 
 	size = LIBNET_IPV4_H + LIBNET_TCP_H + o_pktlen;
@@ -205,6 +239,13 @@ void probe(proberecord *record, int ttl, int q)
 		NULL,					/* data			*/
 		0,						/* datasize?	*/
 		buf);					/* buffer		*/
+		
+	set_options_payload(opt_payload,1450435047,1460);
+	
+	libnet_build_tcp_options(
+            opt_payload,
+            20,
+            buf);
 
 	libnet_build_tcp(
 		record->src_prt,		/* source port	*/
@@ -216,7 +257,7 @@ void probe(proberecord *record, int ttl, int q)
 		(o_ack ? TH_ACK : 0) |
 		(o_ecn ? TH_CWR|TH_ECN : 0), /* control	*/
 
-		0,						/* window		*/
+		5840,					/* window		*/
 		0,						/* urgent?		*/
 		payload,				/* data			*/
 		o_pktlen,				/* datasize		*/
@@ -235,6 +276,17 @@ void probe(proberecord *record, int ttl, int q)
 
 	if (data_tag < 0)
 		fatal("Can't add payload: %s\n", libnet_geterror(libnet_context));
+		
+	set_options_payload(opt_payload,1450435047,1460);
+	
+	tcp_op_tag = libnet_build_tcp_options(
+            opt_payload,
+            20,
+            libnet_context,
+            0);
+    
+    if (tcp_op_tag < 0)
+		fatal("Can't build TCP options header: %s\n", libnet_geterror(libnet_context));
 
 	/* Add the TCP header */
 	tcp_tag = libnet_build_tcp(
@@ -247,7 +299,7 @@ void probe(proberecord *record, int ttl, int q)
 		(o_ack ? TH_ACK : 0) |
 		(o_ecn ? TH_CWR|TH_ECN : 0), /* control	            */
 
-		0,						     /* window		        */
+		5840,                        /* window		        */
 		0,                           /* checksum TBD        */
 		0,						     /* urgent?	            */
 		LIBNET_TCP_H + o_pktlen,     /* TCP PDU size        */
